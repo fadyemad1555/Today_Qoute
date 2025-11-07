@@ -1,0 +1,40 @@
+[project]
+name = "Wallpaper Studio"
+version = "1.0.0"
+description = "Beautiful wallpaper manager for Android"
+requires-python = ">=3.10"
+dependencies = [
+    "flet>=0.27.0",
+    "pyjnius>=1.6.1",
+]
+
+[tool.flet]
+org = "com.wallpaper"
+product = "WallpaperStudio"
+company = "Your Company"
+copyright = "Copyright (C) 2025"
+
+[tool.flet.app]
+path = "src"
+module = "main"
+
+[tool.flet.android]
+permissions = [
+    "android.permission.INTERNET",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.SET_WALLPAPER",
+]
+
+include_packages = [
+    "jnius",
+    "pyjnius",
+]
+
+min_sdk_version = 26
+target_sdk_version = 35
+build_gradle_dependencies = []
+
+[build-system]
+requires = ["flet-build"]
+build-backend = "flet.build"

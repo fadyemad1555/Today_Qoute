@@ -14,9 +14,6 @@ product = "WallpaperStudio"
 company = "Your Company"
 copyright = "Copyright (C) 2025"
 
-[tool.flet.app]
-path = "src"
-module = "main"
 
 [tool.flet.android]
 permissions = [

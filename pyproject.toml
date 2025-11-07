@@ -1,0 +1,45 @@
+[project]
+name = "Background Manager"
+version = "1.0.0"
+description = "Android background wallpaper manager app built with Flet"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Your Name", email = "[email protected]" }
+]
+dependencies = [
+    "flet>=0.27.0",
+    "pyjnius>=1.6.1",
+]
+
+[tool.flet]
+org = "com.example"
+product = "BackgroundManager"
+company = "Your Company"
+copyright = "Copyright (C) 2025"
+
+[tool.flet.app]
+path = "src"
+module = "main"
+
+[tool.flet.android]
+# Required permissions for wallpaper app
+permissions = [
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.SET_WALLPAPER",
+    "android.permission.INTERNET",
+]
+
+# Enable Pyjnius for Android API access
+include_packages = [
+    "jnius",
+]
+
+# Target Android API level
+min_sdk_version = 26
+target_sdk_version = 35
+
+[build-system]
+requires = ["flet-build"]
+build-backend = "flet.build"

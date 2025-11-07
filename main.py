@@ -392,7 +392,11 @@ def main(page: ft.Page):
                             border=ft.border.all(2, ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
                             border_radius=12,
                             clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+<<<<<<< HEAD
                             animate_scale=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
+=======
+                            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+>>>>>>> 4daaf3b (update prompt)
                             animate_opacity=200,
                         )
                         
@@ -569,7 +573,11 @@ def main(page: ft.Page):
                 spacing=10,
             ),
             padding=20,
+<<<<<<< HEAD
             bgcolor=ft.Colors.SURFACE_VARIANT,
+=======
+            bgcolor=ft.Colors.SURFACE,
+>>>>>>> 4daaf3b (update prompt)
             border_radius=ft.border_radius.only(top_left=20, top_right=20),
             shadow=ft.BoxShadow(
                 spread_radius=0,
@@ -635,4 +643,8 @@ if __name__ == "__main__":
         print("=" * 50)
         for error in error_log:
             print(error)
+<<<<<<< HEAD
         print("=" * 50)t
+=======
+        print("=" * 50)
+>>>>>>> 4daaf3b (update prompt)

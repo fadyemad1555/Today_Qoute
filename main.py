@@ -5,15 +5,21 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+
+
+
 # Global error log
 error_log = []
 
-# Check if on Android platform
+# Better platform detection - check if actually running on Android
 IS_ANDROID = False
 try:
-    from jnius import autoclass
-    IS_ANDROID = True
-except ImportError:
+    import sys
+    if 'ANDROID_APP_PATH' in os.environ or 'ANDROID_ROOT' in os.environ:
+        IS_ANDROID = True
+    elif sys.platform.startswith('linux') and os.path.exists('/system/build.prop'):
+        IS_ANDROID = True
+except:
     IS_ANDROID = False
 
 def log_error(error_msg, exception=None):
@@ -44,13 +50,13 @@ def set_wallpaper_android(image_path):
     """
     try:
         if not IS_ANDROID:
-            return False, "⚠ Android API not available (desktop testing mode)"
+            return False, "⚠ Desktop mode - wallpaper feature only works on Android devices"
         
         # Validate image path exists
         if not os.path.exists(image_path):
             return False, f"✗ Image file not found: {image_path}"
         
-        # Check file size (warn if too large)
+        # Check file size
         file_size = os.path.getsize(image_path) / (1024 * 1024)
         if file_size > 50:
             return False, f"✗ Image too large ({file_size:.1f}MB). Max 50MB."
@@ -93,12 +99,9 @@ def set_wallpaper_android(image_path):
             filename = os.path.basename(image_path)
             return True, f"✓ Wallpaper '{filename}' set successfully!"
             
-        except AttributeError as e:
-            log_error("Android attribute error", e)
-            return False, f"✗ Android API error: Missing method/class"
         except Exception as e:
-            log_error("Wallpaper setting failed", e)
-            return False, f"✗ Failed to set wallpaper: {str(e)[:100]}"
+            log_error("Android Pyjnius error", e)
+            return False, "✗ Android API unavailable"
     
     except Exception as e:
         log_error("Unexpected error in set_wallpaper_android", e)
@@ -155,7 +158,7 @@ def main(page: ft.Page):
         page.theme_mode = ft.ThemeMode.DARK
         page.padding = 0
         page.window.width = 400
-        page.window.height = 800
+        page.window.height = 900
         
         # Load images
         images = load_images_from_folder("backgrounds")
@@ -170,10 +173,12 @@ def main(page: ft.Page):
                 "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe3e?w=400",
                 "https://images.unsplash.com/photo-1519904981063-b0cf448d479e?w=400",
                 "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400",
+                "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=400",
+                "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400",
             ]
         
         selected_image = ft.Ref()
-        status_text = ft.Text("", size=14, color=ft.Colors.GREEN)
+        status_text = ft.Text("", size=14, color=ft.Colors.GREEN, weight="w500")
         selected_container_ref = ft.Ref()
         is_loading = ft.Ref()
         is_loading.current = False
@@ -189,6 +194,7 @@ def main(page: ft.Page):
                             top=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                             bottom=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                         )
+                        selected_container_ref.current.shadow = None
                     except Exception as e:
                         log_error("Error resetting previous border", e)
                 
@@ -196,20 +202,26 @@ def main(page: ft.Page):
                 selected_image.current = img_path
                 selected_container_ref.current = img_container
                 img_container.border = ft.Border(
-                    left=ft.BorderSide(4, ft.Colors.BLUE),
-                    right=ft.BorderSide(4, ft.Colors.BLUE),
-                    top=ft.BorderSide(4, ft.Colors.BLUE),
-                    bottom=ft.BorderSide(4, ft.Colors.BLUE),
+                    left=ft.BorderSide(4, ft.Colors.BLUE_400),
+                    right=ft.BorderSide(4, ft.Colors.BLUE_400),
+                    top=ft.BorderSide(4, ft.Colors.BLUE_400),
+                    bottom=ft.BorderSide(4, ft.Colors.BLUE_400),
+                )
+                img_container.shadow = ft.BoxShadow(
+                    spread_radius=4,
+                    blur_radius=12,
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.BLUE_400),
+                    offset=ft.Offset(0, 4),
                 )
                 
                 img_name = os.path.basename(img_path) if os.path.exists(img_path) else img_path.split('/')[-1]
                 status_text.value = f"✓ Selected: {img_name}"
-                status_text.color = ft.Colors.GREEN
+                status_text.color = ft.Colors.GREEN_400
                 page.update()
             except Exception as e:
                 log_error("Error in on_image_click", e)
                 status_text.value = "✗ Error selecting image"
-                status_text.color = ft.Colors.RED
+                status_text.color = ft.Colors.RED_400
                 page.update()
         
         def set_background():
@@ -221,14 +233,14 @@ def main(page: ft.Page):
                 
                 if not selected_image.current:
                     status_text.value = "⚠ Please select an image first"
-                    status_text.color = ft.Colors.ORANGE
+                    status_text.color = ft.Colors.ORANGE_400
                     page.update()
                     return
                 
                 # Show loading
                 is_loading.current = True
                 status_text.value = "⏳ Setting wallpaper..."
-                status_text.color = ft.Colors.BLUE
+                status_text.color = ft.Colors.BLUE_400
                 page.update()
                 
                 img_path = selected_image.current
@@ -246,7 +258,7 @@ def main(page: ft.Page):
                     if not success:
                         is_loading.current = False
                         status_text.value = f"✗ Failed to download: {result}"
-                        status_text.color = ft.Colors.ORANGE
+                        status_text.color = ft.Colors.ORANGE_400
                         page.update()
                         return
                     
@@ -258,10 +270,10 @@ def main(page: ft.Page):
                 
                 if success:
                     status_text.value = message
-                    status_text.color = ft.Colors.GREEN
+                    status_text.color = ft.Colors.GREEN_400
                 else:
                     status_text.value = message
-                    status_text.color = ft.Colors.ORANGE
+                    status_text.color = ft.Colors.ORANGE_400
                 
                 print(f"[INFO] Wallpaper operation: {message}")
                 page.update()
@@ -269,7 +281,7 @@ def main(page: ft.Page):
                 is_loading.current = False
                 log_error("Error in set_background", e)
                 status_text.value = "✗ Error setting wallpaper. Check logs."
-                status_text.color = ft.Colors.RED
+                status_text.color = ft.Colors.RED_400
                 page.update()
         
         def create_image_grid():
@@ -283,120 +295,213 @@ def main(page: ft.Page):
                             content=ft.Image(
                                 src=img,
                                 fit=ft.ImageFit.COVER,
-                                width=150,
-                                height=150,
+                                width=160,
+                                height=160,
                                 error_content=ft.Container(
-                                    content=ft.Icon(
-                                        name=ft.Icons.IMAGE_NOT_SUPPORTED,
-                                        size=40,
-                                        color=ft.Colors.GREY
+                                    content=ft.Column(
+                                        controls=[
+                                            ft.Icon(
+                                                name=ft.Icons.IMAGE_NOT_SUPPORTED,
+                                                size=40,
+                                                color=ft.Colors.GREY_600
+                                            ),
+                                            ft.Text("Failed to load", size=10, color=ft.Colors.GREY_600),
+                                        ],
+                                        alignment=ft.MainAxisAlignment.CENTER,
+                                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                     ),
-                                    width=150,
-                                    height=150,
+                                    width=160,
+                                    height=160,
+                                    bgcolor=ft.Colors.GREY_900,
                                     alignment=ft.alignment.center,
                                 ),
                             ),
-                            width=150,
-                            height=150,
+                            width=160,
+                            height=160,
                             border=ft.Border(
                                 left=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                                 right=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                                 top=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                                 bottom=ft.BorderSide(2, ft.Colors.TRANSPARENT),
                             ),
+                            border_radius=15,
+                            ink=True,
+                            on_hover=lambda e, cont=None: _on_hover(e, cont),
                         )
                         
                         row_items.append(container)
                         container.on_click = lambda e, path=img, cont=container: on_image_click(e, path, cont)
+                        container.on_hover = lambda e, cont=container: _on_hover(e, cont)
                         
                         if (i + 1) % 2 == 0:
-                            grid_items.append(ft.Row(controls=row_items, spacing=10))
+                            grid_items.append(ft.Row(
+                                controls=row_items,
+                                spacing=12,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                            ))
                             row_items = []
                     except Exception as e:
                         log_error(f"Error creating container for image {i}", e)
                         continue
                 
                 if row_items:
-                    grid_items.append(ft.Row(controls=row_items, spacing=10))
+                    grid_items.append(ft.Row(
+                        controls=row_items,
+                        spacing=12,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ))
                 
                 return grid_items
             except Exception as e:
                 log_error("Error in create_image_grid", e)
                 return []
         
+        def _on_hover(e, container):
+            """Hover effect for images"""
+            try:
+                if e.data == "true" and container != selected_container_ref.current:
+                    container.shadow = ft.BoxShadow(
+                        spread_radius=2,
+                        blur_radius=8,
+                        color=ft.Colors.with_opacity(0.4, ft.Colors.BLUE),
+                        offset=ft.Offset(0, 3),
+                    )
+                else:
+                    if container != selected_container_ref.current:
+                        container.shadow = None
+                page.update()
+            except Exception as e:
+                log_error("Hover effect error", e)
+        
         try:
-            # Header
+            # Premium gradient header
             header = ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Text("Background Manager", size=28, weight="bold"),
-                        ft.Text(f"Total: {len(images)} images", size=12, color=ft.Colors.GREY_400),
+                        ft.Text("🎨 Wallpaper Studio", size=32, weight="bold", color=ft.Colors.WHITE),
+                        ft.Text("Customize your device with beautiful wallpapers", size=13, color=ft.Colors.GREY_300, italic=True),
                     ],
-                    spacing=5,
+                    spacing=8,
+                    horizontal_alignment=ft.CrossAxisAlignment.START,
                 ),
-                padding=20,
-                bgcolor=ft.Colors.PRIMARY,
+                padding=25,
+                bgcolor="#1a1a2e",
+                border_radius=ft.border_radius.only(bottom_left=25, bottom_right=25),
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=15,
+                    color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK),
+                    offset=ft.Offset(0, 5),
+                ),
             )
             
-            # Image grid with scroll
+            # Image counter badge with gradient feel
+            counter_badge = ft.Container(
+                content=ft.Text(f"📸  {len(images)} Wallpapers", size=12, color=ft.Colors.WHITE, weight="bold"),
+                padding=ft.padding.symmetric(horizontal=14, vertical=7),
+                bgcolor=ft.Colors.BLUE_700,
+                border_radius=25,
+                alignment=ft.alignment.center,
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=8,
+                    color=ft.Colors.with_opacity(0.3, ft.Colors.BLUE),
+                    offset=ft.Offset(0, 2),
+                ),
+            )
+            
+            # Image grid container with better styling
             image_column = ft.Column(
                 controls=create_image_grid(),
-                spacing=10,
+                spacing=12,
             )
             
             image_scroll = ft.Container(
                 content=image_column,
-                padding=15,
+                padding=20,
                 expand=True,
             )
             
-            # Button row wrapped in container for padding
+            # Premium Set Wallpaper button
+            set_btn = ft.ElevatedButton(
+                text="Set Wallpaper",
+                on_click=lambda e: set_background(),
+                icon=ft.Icons.WALLPAPER_OUTLINED,
+                expand=True,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=14),
+                    padding=ft.padding.symmetric(vertical=14),
+                    color=ft.Colors.WHITE,
+                ),
+            )
+            
+            clear_btn = ft.IconButton(
+                ft.Icons.CLEAR_OUTLINED,
+                tooltip="Clear selection",
+                icon_size=22,
+                on_click=lambda e: (
+                    selected_container_ref.current.update() if selected_container_ref.current else None,
+                    setattr(selected_image, 'current', None),
+                    setattr(status_text, 'value', ''),
+                    page.update()
+                ),
+            )
+            
             button_row = ft.Container(
                 content=ft.Row(
+                    controls=[set_btn, clear_btn],
+                    spacing=10,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=20,
+                bgcolor=ft.Colors.SURFACE,
+                border_radius=ft.border_radius.only(top_left=20, top_right=20),
+                shadow=ft.BoxShadow(
+                    spread_radius=0,
+                    blur_radius=10,
+                    color=ft.Colors.with_opacity(0.15, ft.Colors.BLACK),
+                    offset=ft.Offset(0, -2),
+                ),
+            )
+            
+            # Stylish status bar
+            status_container = ft.Container(
+                content=ft.Row(
                     controls=[
-                        ft.ElevatedButton(
-                            "Set Background",
-                            on_click=lambda e: set_background(),
-                            icon=ft.Icons.WALLPAPER,
-                            expand=True,
-                        ),
-                        ft.IconButton(
-                            ft.Icons.CLEAR,
-                            tooltip="Clear selection",
-                            on_click=lambda e: (
-                                selected_container_ref.current.update() if selected_container_ref.current else None,
-                                setattr(selected_image, 'current', None),
-                                setattr(status_text, 'value', ''),
-                                page.update()
-                            ),
-                        ),
+                        ft.Icon(name=ft.Icons.INFO_OUTLINE, size=18, color=ft.Colors.GREEN_400)
                     ],
                     spacing=10,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=16,
+                bgcolor=ft.Colors.SURFACE,
+                border_radius=12,
+                border=ft.border.all(1, ft.Colors.GREY_800),
+            )
+            
+            # Footer with counter
+            footer = ft.Container(
+                content=ft.Row(
+                    controls=[counter_badge],
+                    alignment=ft.MainAxisAlignment.CENTER,
                 ),
                 padding=15,
+                bgcolor=ft.Colors.GREY_900,
             )
             
-            # Status bar
-            status_bar = ft.Container(
-                content=status_text,
-                padding=15,
-                bgcolor=ft.Colors.SURFACE,
-            )
-            
-            # Main content
-            content = ft.Column(
+            # Main scrollable content
+            main_scroll = ft.Column(
                 controls=[
                     header,
-                    ft.Divider(height=1),
                     image_scroll,
-                    ft.Divider(height=1),
                     button_row,
-                    status_bar,
+                    status_container,
+                    footer,
                 ],
                 expand=True,
             )
             
-            page.add(content)
+            page.add(main_scroll)
             print("[INFO] App initialized successfully")
         except Exception as e:
             log_error("Error building UI", e)

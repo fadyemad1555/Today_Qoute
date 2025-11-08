@@ -34,8 +34,7 @@ jobs:
       - name: Build APK
         id: build-apk
         run: |
-          flet build apk --split-per-abi --verbose --include-packages flet-permission-handler
-
+          flet build apk --split-per-abi --verbose --source-packages flet-permission-handle
       - name: List APK files
         if: success()
         run: |

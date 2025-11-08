@@ -209,19 +209,19 @@ class PermissionTestApp:
             self.add_log("=" * 50, "cyan")
             self.add_log("TESTING SET WALLPAPER", "yellow")
             
-            if not IS_ANDROID:
-                self.add_log("❌ Not Android - wallpaper setting only works on Android", "red")
-                self.status_text.value = "❌ Android Only Feature"
-                self.status_text.color = "red"
-                self.page.update()
-                return
+            # if not IS_ANDROID:
+            #     self.add_log("❌ Not Android - wallpaper setting only works on Android", "red")
+            #     self.status_text.value = "❌ Android Only Feature"
+            #     self.status_text.color = "red"
+            #     self.page.update()
+            #     return
             
-            if not self.storage_granted:
-                self.add_log("⚠️ Storage permission not granted", "orange")
-                self.status_text.value = "⚠️ Grant permission first"
-                self.status_text.color = "orange"
-                self.page.update()
-                return
+            # if not self.storage_granted:
+            #     self.add_log("⚠️ Storage permission not granted", "orange")
+            #     self.status_text.value = "⚠️ Grant permission first"
+            #     self.status_text.color = "orange"
+            #     self.page.update()
+            #     return
             
             # Use a cached/downloaded image from temp directory
             test_dir = tempfile.gettempdir()

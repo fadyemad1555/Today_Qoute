@@ -29,7 +29,7 @@ class PermissionTestApp:
         )
         
         self.status_text = ft.Text(
-            "Ready to test permissions",
+            "جاهز لتجربة الطرق - Ready",
             size=16,
             weight=ft.FontWeight.BOLD,
         )
@@ -75,7 +75,70 @@ class PermissionTestApp:
         self.page.update()
         print(f"[{timestamp}] {message}")
     
-    async def check_storage_permission(self, e):
+    async def run_single_method(self, e, method_num):
+        """تشغيل طريقة واحدة محددة"""
+        try:
+            self.add_log("=" * 50, "cyan")
+            self.add_log(f"🚀 تشغيل الطريقة {method_num}", "yellow")
+            
+            if not IS_ANDROID:
+                self.add_log("❌ التطبيق يعمل فقط على أندرويد", "red")
+                self.status_text.value = "❌ أندرويد فقط"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            # الحصول على الصورة
+            image_path = self.get_test_image()
+            if not image_path:
+                self.add_log("❌ فشل تحميل الصورة", "red")
+                self.status_text.value = "❌ لا توجد صورة"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            # التحقق من الملف
+            if not os.path.exists(image_path):
+                self.add_log("❌ الصورة غير موجودة", "red")
+                self.status_text.value = "❌ الصورة غير موجودة"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            file_size = os.path.getsize(image_path) / 1024
+            self.add_log(f"📁 حجم الصورة: {file_size:.1f} كيلوبايت", "cyan")
+            
+            # تشغيل الطريقة المحددة
+            methods = {
+                1: ("الطريقة 1: Direct Bitmap", self.method1_direct_bitmap),
+                2: ("الطريقة 2: Input Stream", self.method2_input_stream),
+                3: ("الطريقة 3: Content URI", self.method3_content_uri),
+                4: ("الطريقة 4: With Scaling", self.method4_with_scaling),
+                5: ("الطريقة 5: Intent", self.method5_intent),
+            }
+            
+            method_name, method_func = methods[method_num]
+            self.add_log(f"▶️ جاري تشغيل {method_name}...", "cyan")
+            
+            success = await method_func(image_path)
+            
+            if success:
+                self.add_log(f"🎉 نجحت {method_name}!", "green")
+                self.status_text.value = f"✅ نجح: {method_name}"
+                self.status_text.color = "green"
+            else:
+                self.add_log(f"❌ فشلت {method_name}", "red")
+                self.status_text.value = f"❌ فشل: {method_name}"
+                self.status_text.color = "red"
+            
+            self.page.update()
+            
+        except Exception as e:
+            self.add_log(f"❌ خطأ: {str(e)}", "red")
+            self.status_text.value = "❌ حدث خطأ"
+            self.status_text.color = "red"
+            self.page.update()
+    
         """Check storage permission"""
         try:
             self.add_log("=" * 50, "cyan")
@@ -210,172 +273,372 @@ class PermissionTestApp:
             self.status_text.value = "❌ File Operations Failed"
             self.status_text.color = "red"
             self.page.update()
-    
-    async def test_set_wallpaper(self, e):
-        """Test set wallpaper (Android only)"""
+
+    def get_test_image(self):
+        """Get or download test image"""
         try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("TESTING SET WALLPAPER", "yellow")
-            
-            # if not IS_ANDROID:
-            #     self.add_log("❌ Not Android - wallpaper setting only works on Android", "red")
-            #     self.status_text.value = "❌ Android Only Feature"
-            #     self.status_text.color = "red"
-            #     self.page.update()
-            #     return
-            
-            # if not self.storage_granted:
-            #     self.add_log("⚠️ Storage permission not granted", "orange")
-            #     self.status_text.value = "⚠️ Grant permission first"
-            #     self.status_text.color = "orange"
-            #     self.page.update()
-            #     return
-            
-            # Use a cached/downloaded image from temp directory
             test_dir = tempfile.gettempdir()
+            test_image = os.path.join(test_dir, "wallpaper_test.jpg")
+            
+            # Check if image already exists
+            if os.path.exists(test_image) and os.path.getsize(test_image) > 1000:
+                self.add_log(f"✅ استخدام صورة موجودة", "green")
+                return test_image
             
             # Look for any existing image files
-            self.add_log(f"Looking for test images in: {test_dir}", "cyan")
-            
-            test_image = None
+            self.add_log(f"🔍 البحث عن صور في: {test_dir}", "cyan")
             for file in os.listdir(test_dir):
                 if file.endswith(('.jpg', '.jpeg', '.png')):
-                    test_image = os.path.join(test_dir, file)
-                    self.add_log(f"✅ Found test image: {file}", "green")
-                    break
+                    existing_image = os.path.join(test_dir, file)
+                    if os.path.getsize(existing_image) > 1000:
+                        self.add_log(f"✅ تم العثور على: {file}", "green")
+                        return existing_image
             
-            # If no image found, try to download one
-            if not test_image:
-                self.add_log("No image found, downloading sample...", "cyan")
-                import urllib.request
-                
-                sample_url = "https://images.pexels.com/photos/1103970/pexels-photo-1103970.jpeg?auto=compress&cs=tinysrgb&w=400"
-                test_image = os.path.join(test_dir, "wallpaper_test.jpg")
-                
-                try:
-                    req = urllib.request.Request(sample_url)
-                    req.add_header('User-Agent', 'Mozilla/5.0')
-                    
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        data = response.read()
-                        with open(test_image, 'wb') as f:
-                            f.write(data)
-                    
-                    self.add_log(f"✅ Downloaded test image: {len(data)} bytes", "green")
-                except Exception as dl_error:
-                    self.add_log(f"❌ Download failed: {str(dl_error)}", "red")
-                    self.status_text.value = "❌ No test image available"
-                    self.status_text.color = "red"
-                    self.page.update()
-                    return
+            # Download sample image
+            self.add_log("⬇️ جاري تحميل صورة تجريبية...", "cyan")
+            import urllib.request
             
-            # Check file exists and has size
-            if not os.path.exists(test_image):
-                self.add_log("❌ Test image file not found", "red")
-                self.status_text.value = "❌ Image Not Found"
-                self.status_text.color = "red"
-                self.page.update()
-                return
+            sample_url = "https://images.pexels.com/photos/1103970/pexels-photo-1103970.jpeg?auto=compress&cs=tinysrgb&w=400"
             
-            file_size = os.path.getsize(test_image) / 1024
-            self.add_log(f"Image size: {file_size:.1f} KB", "cyan")
+            req = urllib.request.Request(sample_url)
+            req.add_header('User-Agent', 'Mozilla/5.0')
             
-            # Try to set wallpaper
-            self.add_log("Setting wallpaper...", "cyan")
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = response.read()
+                with open(test_image, 'wb') as f:
+                    f.write(data)
+            
+            self.add_log(f"✅ تم التحميل: {len(data)} بايت", "green")
+            return test_image
+            
+        except Exception as e:
+            self.add_log(f"❌ خطأ في الصورة: {str(e)}", "red")
+            return None
+
+    async def method1_direct_bitmap(self, image_path):
+        """الطريقة 1: تعيين مباشر باستخدام Bitmap"""
+        try:
+            self.add_log("--- الطريقة 1: Direct setBitmap ---", "yellow")
             
             from jnius import autoclass, cast
             
+            # Get Android classes
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            currentActivity = cast('android.app.Activity', PythonActivity.mActivity)
-            context = cast('android.content.Context', currentActivity.getApplicationContext())
-            
-            File = autoclass('java.io.File')
-            BitmapFactory = autoclass('android.graphics.BitmapFactory')
-            Options = autoclass('android.graphics.BitmapFactory$Options')
             WallpaperManager = autoclass('android.app.WallpaperManager')
+            BitmapFactory = autoclass('android.graphics.BitmapFactory')
             
-            file = File(test_image)
+            # Get context
+            activity = cast('android.app.Activity', PythonActivity.mActivity)
+            context = cast('android.content.Context', activity.getApplicationContext())
             
-            # Decode with options
-            options = Options()
-            options.inJustDecodeBounds = True
-            BitmapFactory.decodeFile(file.getAbsolutePath(), options)
-            
-            self.add_log(f"Image dimensions: {options.outWidth}x{options.outHeight}", "cyan")
-            
-            # Check if valid
-            if options.outWidth <= 0 or options.outHeight <= 0:
-                self.add_log("❌ Invalid image dimensions", "red")
-                self.status_text.value = "❌ Invalid Image"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            # Decode actual bitmap
-            options.inJustDecodeBounds = False
-            bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options)
+            self.add_log("🔄 فك تشفير الصورة...", "cyan")
+            bitmap = BitmapFactory.decodeFile(image_path)
             
             if not bitmap:
-                self.add_log("❌ Failed to decode image", "red")
-                self.status_text.value = "❌ Image Decode Failed"
-                self.status_text.color = "red"
-                self.page.update()
-                return
+                raise Exception("فشل فك تشفير الصورة")
             
-            self.add_log("✅ Image decoded successfully", "green")
+            self.add_log(f"✅ الصورة: {bitmap.getWidth()}x{bitmap.getHeight()}", "green")
             
-            # Set wallpaper
+            # تعيين الخلفية
+            self.add_log("📱 جاري تعيين الخلفية...", "cyan")
             manager = WallpaperManager.getInstance(context)
             manager.setBitmap(bitmap)
             bitmap.recycle()
             
-            self.add_log("✅ WALLPAPER SET SUCCESSFULLY!", "green")
-            self.status_text.value = "✅ Wallpaper Set Successfully!"
-            self.status_text.color = "green"
+            self.add_log("✅ نجحت الطريقة 1!", "green")
+            return True
             
+        except Exception as e:
+            self.add_log(f"❌ فشلت الطريقة 1: {str(e)}", "red")
+            return False
+
+    async def method2_input_stream(self, image_path):
+        """الطريقة 2: باستخدام InputStream"""
+        try:
+            self.add_log("--- الطريقة 2: InputStream ---", "yellow")
+            
+            from jnius import autoclass, cast
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            WallpaperManager = autoclass('android.app.WallpaperManager')
+            FileInputStream = autoclass('java.io.FileInputStream')
+            File = autoclass('java.io.File')
+            
+            activity = cast('android.app.Activity', PythonActivity.mActivity)
+            context = cast('android.content.Context', activity.getApplicationContext())
+            
+            # Create file input stream
+            self.add_log("🔄 إنشاء stream...", "cyan")
+            file = File(image_path)
+            stream = FileInputStream(file)
+            
+            # Set wallpaper from stream
+            self.add_log("📱 تعيين الخلفية من stream...", "cyan")
+            manager = WallpaperManager.getInstance(context)
+            manager.setStream(stream)
+            stream.close()
+            
+            self.add_log("✅ نجحت الطريقة 2!", "green")
+            return True
+            
+        except Exception as e:
+            self.add_log(f"❌ فشلت الطريقة 2: {str(e)}", "red")
+            return False
+
+    async def method3_content_uri(self, image_path):
+        """الطريقة 3: باستخدام Content URI"""
+        try:
+            self.add_log("--- الطريقة 3: Content URI ---", "yellow")
+            
+            from jnius import autoclass, cast
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            WallpaperManager = autoclass('android.app.WallpaperManager')
+            BitmapFactory = autoclass('android.graphics.BitmapFactory')
+            File = autoclass('java.io.File')
+            Uri = autoclass('android.net.Uri')
+            
+            activity = cast('android.app.Activity', PythonActivity.mActivity)
+            context = cast('android.content.Context', activity.getApplicationContext())
+            
+            # Create URI
+            self.add_log("🔗 إنشاء URI...", "cyan")
+            file = File(image_path)
+            uri = Uri.fromFile(file)
+            
+            self.add_log(f"URI: {uri.toString()}", "cyan")
+            
+            # Open input stream from URI
+            self.add_log("🔄 فتح stream من URI...", "cyan")
+            resolver = context.getContentResolver()
+            stream = resolver.openInputStream(uri)
+            
+            # Decode bitmap
+            bitmap = BitmapFactory.decodeStream(stream)
+            stream.close()
+            
+            if not bitmap:
+                raise Exception("فشل فك التشفير من URI")
+            
+            # Set wallpaper
+            self.add_log("📱 تعيين الخلفية...", "cyan")
+            manager = WallpaperManager.getInstance(context)
+            manager.setBitmap(bitmap)
+            bitmap.recycle()
+            
+            self.add_log("✅ نجحت الطريقة 3!", "green")
+            return True
+            
+        except Exception as e:
+            self.add_log(f"❌ فشلت الطريقة 3: {str(e)}", "red")
+            return False
+
+    async def method4_with_scaling(self, image_path):
+        """الطريقة 4: مع تغيير الحجم"""
+        try:
+            self.add_log("--- الطريقة 4: With Scaling ---", "yellow")
+            
+            from jnius import autoclass, cast
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            WallpaperManager = autoclass('android.app.WallpaperManager')
+            BitmapFactory = autoclass('android.graphics.BitmapFactory')
+            Options = autoclass('android.graphics.BitmapFactory$Options')
+            Bitmap = autoclass('android.graphics.Bitmap')
+            Config = autoclass('android.graphics.Bitmap$Config')
+            Canvas = autoclass('android.graphics.Canvas')
+            Paint = autoclass('android.graphics.Paint')
+            
+            activity = cast('android.app.Activity', PythonActivity.mActivity)
+            context = cast('android.content.Context', activity.getApplicationContext())
+            
+            # Get screen dimensions
+            display = activity.getWindowManager().getDefaultDisplay()
+            width = display.getWidth()
+            height = display.getHeight()
+            self.add_log(f"📱 الشاشة: {width}x{height}", "cyan")
+            
+            # Decode with bounds first
+            self.add_log("🔍 فحص أبعاد الصورة...", "cyan")
+            options = Options()
+            options.inJustDecodeBounds = True
+            BitmapFactory.decodeFile(image_path, options)
+            
+            img_width = options.outWidth
+            img_height = options.outHeight
+            self.add_log(f"🖼️ الصورة: {img_width}x{img_height}", "cyan")
+            
+            # Calculate sample size
+            sample_size = 1
+            if img_width > width or img_height > height:
+                sample_size = max(img_width // width, img_height // height)
+            
+            self.add_log(f"📏 حجم العينة: {sample_size}", "cyan")
+            
+            # Decode with sample size
+            options.inJustDecodeBounds = False
+            options.inSampleSize = sample_size
+            bitmap = BitmapFactory.decodeFile(image_path, options)
+            
+            if not bitmap:
+                raise Exception("فشل فك تشفير الصورة")
+            
+            self.add_log(f"✅ تم الفك: {bitmap.getWidth()}x{bitmap.getHeight()}", "green")
+            
+            # Set wallpaper
+            self.add_log("📱 تعيين الخلفية...", "cyan")
+            manager = WallpaperManager.getInstance(context)
+            manager.setBitmap(bitmap)
+            bitmap.recycle()
+            
+            self.add_log("✅ نجحت الطريقة 4!", "green")
+            return True
+            
+        except Exception as e:
+            self.add_log(f"❌ فشلت الطريقة 4: {str(e)}", "red")
+            return False
+
+    async def method5_intent(self, image_path):
+        """الطريقة 5: باستخدام Intent (الأكثر موثوقية)"""
+        try:
+            self.add_log("--- الطريقة 5: Intent ---", "yellow")
+            
+            from jnius import autoclass, cast
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            
+            activity = cast('android.app.Activity', PythonActivity.mActivity)
+            
+            # Create URI
+            file = File(image_path)
+            uri = Uri.fromFile(file)
+            
+            # Create intent
+            self.add_log("📲 إنشاء Intent للخلفية...", "cyan")
+            intent = Intent(Intent.ACTION_ATTACH_DATA)
+            intent.setDataAndType(uri, "image/*")
+            intent.putExtra("mimeType", "image/*")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            
+            # Start chooser
+            self.add_log("🚀 فتح قائمة الاختيار...", "cyan")
+            chooser = Intent.createChooser(intent, "تعيين كخلفية")
+            activity.startActivity(chooser)
+            
+            self.add_log("✅ تم إرسال Intent!", "green")
+            self.add_log("⚠️ اختر 'خلفية الشاشة' من القائمة", "yellow")
+            return True
+            
+        except Exception as e:
+            self.add_log(f"❌ فشلت الطريقة 5: {str(e)}", "red")
+            return False
+    
+    async def test_set_wallpaper(self, e):
+        """تجربة جميع الطرق تلقائياً"""
+        try:
+            self.add_log("=" * 50, "cyan")
+            self.add_log("🔄 تجربة جميع الطرق تلقائياً", "yellow")
+            
+            if not IS_ANDROID:
+                self.add_log("❌ يعمل فقط على أندرويد", "red")
+                self.status_text.value = "❌ أندرويد فقط"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            # Get test image
+            image_path = self.get_test_image()
+            if not image_path:
+                self.add_log("❌ لا توجد صورة اختبار", "red")
+                self.status_text.value = "❌ لا توجد صورة"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            # Verify file
+            if not os.path.exists(image_path):
+                self.add_log("❌ الصورة غير موجودة", "red")
+                self.status_text.value = "❌ الصورة غير موجودة"
+                self.status_text.color = "red"
+                self.page.update()
+                return
+            
+            file_size = os.path.getsize(image_path) / 1024
+            self.add_log(f"📁 الصورة: {file_size:.1f} كيلوبايت", "cyan")
+            self.add_log(f"📂 المسار: {image_path}", "cyan")
+            
+            # Try methods in order
+            methods = [
+                ("الطريقة 1: Direct Bitmap", self.method1_direct_bitmap),
+                ("الطريقة 2: Input Stream", self.method2_input_stream),
+                ("الطريقة 3: Content URI", self.method3_content_uri),
+                ("الطريقة 4: With Scaling", self.method4_with_scaling),
+                ("الطريقة 5: Intent", self.method5_intent),
+            ]
+            
+            for method_name, method_func in methods:
+                self.add_log(f"\n🔄 جاري تجربة {method_name}...", "cyan")
+                success = await method_func(image_path)
+                
+                if success:
+                    self.add_log(f"\n🎉 {method_name} نجحت!", "green")
+                    self.status_text.value = f"✅ نجح: {method_name}"
+                    self.status_text.color = "green"
+                    self.page.update()
+                    return
+                
+                # Small delay between methods
+                import asyncio
+                await asyncio.sleep(0.5)
+            
+            # If all failed
+            self.add_log("\n❌ فشلت جميع الطرق", "red")
+            self.status_text.value = "❌ فشلت جميع الطرق"
+            self.status_text.color = "red"
             self.page.update()
             
         except Exception as e:
-            self.add_log(f"❌ Wallpaper error: {str(e)}", "red")
-            self.add_log(f"Error type: {type(e).__name__}", "red")
+            self.add_log(f"❌ خطأ كبير: {str(e)}", "red")
             import traceback
             tb = traceback.format_exc()
-            # Split traceback into lines and log each
-            for line in tb.split('\n')[:5]:  # First 5 lines only
+            for line in tb.split('\n')[:5]:
                 if line.strip():
                     self.add_log(line[:100], "red")
-            self.status_text.value = "❌ Wallpaper Setting Failed"
+            self.status_text.value = "❌ خطأ كبير"
             self.status_text.color = "red"
             self.page.update()
     
     async def open_settings(self, e):
-        """Open app settings"""
+        """فتح إعدادات التطبيق"""
         try:
             self.add_log("=" * 50, "cyan")
-            self.add_log("OPENING APP SETTINGS", "yellow")
+            self.add_log("⚙️ فتح الإعدادات", "yellow")
             
             if not IS_ANDROID:
-                self.add_log("❌ Not Android", "red")
+                self.add_log("❌ ليس أندرويد", "red")
                 return
             
             if self.has_permission_handler:
                 success = await self.permission_handler.open_app_settings()
                 if success:
-                    self.add_log("✅ Settings opened", "green")
+                    self.add_log("✅ تم فتح الإعدادات", "green")
                 else:
-                    self.add_log("❌ Failed to open settings", "red")
+                    self.add_log("❌ فشل فتح الإعدادات", "red")
             else:
-                self.add_log("❌ Permission handler not available", "red")
+                self.add_log("❌ معالج الأذونات غير متوفر", "red")
             
         except Exception as e:
-            self.add_log(f"❌ Error: {str(e)}", "red")
+            self.add_log(f"❌ خطأ: {str(e)}", "red")
     
     def clear_logs(self, e):
-        """Clear all logs"""
+        """مسح جميع السجلات"""
         self.logs.clear()
         self.log_container.controls.clear()
-        self.add_log("Logs cleared", "cyan")
-        self.status_text.value = "Ready to test permissions"
+        self.add_log("تم مسح السجلات ✓", "cyan")
+        self.status_text.value = "جاهز لتجربة الطرق"
         self.status_text.color = "white"
         self.page.update()
     
@@ -395,8 +658,8 @@ class PermissionTestApp:
                         ft.Row([
                             ft.Icon(ft.Icons.SECURITY, size=40, color=ft.Colors.CYAN_400),
                             ft.Column([
-                                ft.Text("Permission Test", size=28, weight=ft.FontWeight.BOLD),
-                                ft.Text(f"Platform: {'Android' if IS_ANDROID else 'Desktop'}", size=12, color=ft.Colors.GREY_400),
+                                ft.Text("اختبار الخلفيات", size=28, weight=ft.FontWeight.BOLD),
+                                ft.Text(f"المنصة: {'أندرويد' if IS_ANDROID else 'سطح المكتب'}", size=12, color=ft.Colors.GREY_400),
                             ], spacing=2),
                         ], spacing=15),
                         ft.Container(height=10),
@@ -412,57 +675,68 @@ class PermissionTestApp:
                 # Control Buttons
                 ft.Container(
                     content=ft.Column([
-                        ft.Text("Step 1: Check Permission", size=14, weight=ft.FontWeight.BOLD),
+                        ft.Text("طرق تعيين الخلفية - Wallpaper Methods", size=16, weight=ft.FontWeight.BOLD),
+                        
                         ft.ElevatedButton(
-                            "Check Storage Permission",
-                            icon=ft.Icons.SEARCH,
-                            on_click=self.check_storage_permission,
+                            "الطريقة 1: Direct Bitmap",
+                            icon=ft.Icons.IMAGE,
+                            on_click=lambda e: self.run_single_method(e, 1),
                             width=300,
+                            bgcolor=ft.Colors.BLUE_700,
                         ),
                         
-                        ft.Divider(height=20),
-                        
-                        ft.Text("Step 2: Request Permission", size=14, weight=ft.FontWeight.BOLD),
                         ft.ElevatedButton(
-                            "Request Storage Permission",
-                            icon=ft.Icons.HOME,
-                            on_click=self.request_storage_permission,
-                            width=300,
-                            bgcolor=ft.Colors.ORANGE_700,
-                        ),
-                        
-                        ft.Divider(height=20),
-                        
-                        ft.Text("Step 3: Test File Operations", size=14, weight=ft.FontWeight.BOLD),
-                        ft.ElevatedButton(
-                            "Test File Read/Write",
-                            icon=ft.Icons.FILE_COPY,
-                            on_click=self.test_file_write,
+                            "الطريقة 2: Input Stream",
+                            icon=ft.Icons.STREAM,
+                            on_click=lambda e: self.run_single_method(e, 2),
                             width=300,
                             bgcolor=ft.Colors.GREEN_700,
                         ),
                         
-                        ft.Divider(height=20),
-                        
-                        ft.Text("Step 4: Test Set Wallpaper", size=14, weight=ft.FontWeight.BOLD),
                         ft.ElevatedButton(
-                            "Test Set Wallpaper (Android)",
-                            icon=ft.Icons.WALLPAPER,
-                            on_click=self.test_set_wallpaper,
+                            "الطريقة 3: Content URI",
+                            icon=ft.Icons.LINK,
+                            on_click=lambda e: self.run_single_method(e, 3),
+                            width=300,
+                            bgcolor=ft.Colors.ORANGE_700,
+                        ),
+                        
+                        ft.ElevatedButton(
+                            "الطريقة 4: With Scaling",
+                            icon=ft.Icons.PHOTO_SIZE_SELECT_LARGE,
+                            on_click=lambda e: self.run_single_method(e, 4),
                             width=300,
                             bgcolor=ft.Colors.PURPLE_700,
+                        ),
+                        
+                        ft.ElevatedButton(
+                            "الطريقة 5: Intent (موصى بها)",
+                            icon=ft.Icons.OPEN_IN_NEW,
+                            on_click=lambda e: self.run_single_method(e, 5),
+                            width=300,
+                            bgcolor=ft.Colors.RED_700,
+                        ),
+                        
+                        ft.Divider(height=20),
+                        
+                        ft.ElevatedButton(
+                            "🔄 جرب كل الطرق تلقائياً",
+                            icon=ft.Icons.AUTORENEW,
+                            on_click=self.test_set_wallpaper,
+                            width=300,
+                            bgcolor=ft.Colors.CYAN_700,
                         ),
                         
                         ft.Divider(height=20),
                         
                         ft.Row([
                             ft.ElevatedButton(
-                                "Open Settings",
+                                "⚙️ الإعدادات",
                                 icon=ft.Icons.SETTINGS,
                                 on_click=self.open_settings,
                             ),
                             ft.ElevatedButton(
-                                "Clear Logs",
+                                "🗑️ مسح السجل",
                                 icon=ft.Icons.CLEAR,
                                 on_click=self.clear_logs,
                             ),
@@ -480,7 +754,7 @@ class PermissionTestApp:
                     content=ft.Column([
                         ft.Row([
                             ft.Icon(ft.Icons.TERMINAL, size=20),
-                            ft.Text("Activity Log", size=16, weight=ft.FontWeight.BOLD),
+                            ft.Text("سجل النشاط - Activity Log", size=16, weight=ft.FontWeight.BOLD),
                         ], spacing=10),
                         ft.Divider(height=1),
                         self.log_container,
@@ -497,7 +771,7 @@ class PermissionTestApp:
         )
 
 def main(page: ft.Page):
-    page.title = "Permission Test App"
+    page.title = "اختبار الخلفيات - Wallpaper Test"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 0
     page.bgcolor = "#0a0e1a"
@@ -506,9 +780,9 @@ def main(page: ft.Page):
     page.add(app.build())
     
     # Add initial log
-    app.add_log("App started successfully", "green")
-    app.add_log(f"Platform: {'Android' if IS_ANDROID else 'Desktop'}", "cyan")
-    app.add_log(f"Permission handler: {'Available' if app.has_permission_handler else 'Not installed'}", 
+    app.add_log("✅ تم بدء التطبيق بنجاح", "green")
+    app.add_log(f"📱 المنصة: {'أندرويد' if IS_ANDROID else 'سطح المكتب'}", "cyan")
+    app.add_log(f"🔧 معالج الأذونات: {'متوفر' if app.has_permission_handler else 'غير مثبت'}", 
                 "green" if app.has_permission_handler else "orange")
 
 if __name__ == "__main__":

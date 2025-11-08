@@ -52,11 +52,19 @@ class PermissionTestApp:
         
     def add_log(self, message: str, color: str = "white"):
         """Add log entry"""
+        m=""
+        n=0
+        for x in message.split(" "):
+            m+=x
+            n+=1
+            if n==2:
+                n=0
+                m+="\n"
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_entry = ft.Container(
             content=ft.Row([
                 ft.Text(f"[{timestamp}]", size=11, color="grey"),
-                ft.Text(message, size=12, color=color),
+                ft.Text(m, size=12, color=color),
             ], spacing=8),
             padding=5,
             bgcolor="#1a1a1a",

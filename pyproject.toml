@@ -9,19 +9,19 @@ dependencies = [
 ]
 
 [tool.flet]
-org = "com.wallpaper"
-product = "WallpaperStudio"
+org = "wallpaper"
+product = "fWallpaperStudio"
 company = "Your Company"
 copyright = "Copyright (C) 2025"
 
-[tool.flet.android.permission] # --android-permissions
-"android.permission.CAMERA" = true
-"android.permission.CAMERA" = true
-"android.permission.INTERNET" =true
-"android.permission.READ_EXTERNAL_STORAGE" =true
-"android.permission.WRITE_EXTERNAL_STORAGE" =true
-"android.permission.SET_WALLPAPER"=true
+
 [tool.flet.android]
+permissions = [
+    "android.permission.INTERNET",
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+    "android.permission.SET_WALLPAPER",
+]
 
 include_packages = ["pyjnius"]
 

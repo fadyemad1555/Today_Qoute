@@ -37,7 +37,8 @@ jobs:
           flet build apk --split-per-abi --verbose \
           --android-permissions android.permission.READ_EXTERNAL_STORAGE=True \
           android.permission.WRITE_EXTERNAL_STORAGE=True \
-          --android-features android.hardware.location.network=True
+          android.permission.SET_WALLPAPER=True \
+          --android-features android.hardware.location.network=True 
       - name: List APK files
         if: success()
         run: |

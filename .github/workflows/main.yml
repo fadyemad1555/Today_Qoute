@@ -34,7 +34,7 @@ jobs:
       - name: Build APK
         id: build-apk
         run: |
-          flet build apk --split-per-abi --verbose --debug
+          flet build apk --split-per-abi --verbose 
       - name: List APK files
         if: success()
         run: |

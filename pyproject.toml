@@ -24,9 +24,11 @@ permissions = [
 ]
 
 include_packages = [
-    "flet-permission-handler",
+    "flet",
     "pyjnius",
 ]
+
+dependencies=["flet-permission-handler"]
 
 min_sdk_version = 26
 target_sdk_version = 35

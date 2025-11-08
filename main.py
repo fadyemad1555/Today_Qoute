@@ -75,6 +75,26 @@ class PermissionTestApp:
         self.page.update()
         print(f"[{timestamp}] {message}")
     
+    async def run_method1(self, e):
+        """تشغيل الطريقة 1"""
+        await self.run_single_method(e, 1)
+    
+    async def run_method2(self, e):
+        """تشغيل الطريقة 2"""
+        await self.run_single_method(e, 2)
+    
+    async def run_method3(self, e):
+        """تشغيل الطريقة 3"""
+        await self.run_single_method(e, 3)
+    
+    async def run_method4(self, e):
+        """تشغيل الطريقة 4"""
+        await self.run_single_method(e, 4)
+    
+    async def run_method5(self, e):
+        """تشغيل الطريقة 5"""
+        await self.run_single_method(e, 5)
+
     async def run_single_method(self, e, method_num):
         """تشغيل طريقة واحدة محددة"""
         try:
@@ -680,7 +700,7 @@ class PermissionTestApp:
                         ft.ElevatedButton(
                             "الطريقة 1: Direct Bitmap",
                             icon=ft.Icons.IMAGE,
-                            on_click=lambda e: self.run_single_method(e, 1),
+                            on_click=self.run_method1,
                             width=300,
                             bgcolor=ft.Colors.BLUE_700,
                         ),
@@ -688,7 +708,7 @@ class PermissionTestApp:
                         ft.ElevatedButton(
                             "الطريقة 2: Input Stream",
                             icon=ft.Icons.STREAM,
-                            on_click=lambda e: self.run_single_method(e, 2),
+                            on_click=self.run_method2,
                             width=300,
                             bgcolor=ft.Colors.GREEN_700,
                         ),
@@ -696,7 +716,7 @@ class PermissionTestApp:
                         ft.ElevatedButton(
                             "الطريقة 3: Content URI",
                             icon=ft.Icons.LINK,
-                            on_click=lambda e: self.run_single_method(e, 3),
+                            on_click=self.run_method3,
                             width=300,
                             bgcolor=ft.Colors.ORANGE_700,
                         ),
@@ -704,7 +724,7 @@ class PermissionTestApp:
                         ft.ElevatedButton(
                             "الطريقة 4: With Scaling",
                             icon=ft.Icons.PHOTO_SIZE_SELECT_LARGE,
-                            on_click=lambda e: self.run_single_method(e, 4),
+                            on_click=self.run_method4,
                             width=300,
                             bgcolor=ft.Colors.PURPLE_700,
                         ),
@@ -712,7 +732,7 @@ class PermissionTestApp:
                         ft.ElevatedButton(
                             "الطريقة 5: Intent (موصى بها)",
                             icon=ft.Icons.OPEN_IN_NEW,
-                            on_click=lambda e: self.run_single_method(e, 5),
+                            on_click=self.run_method5,
                             width=300,
                             bgcolor=ft.Colors.RED_700,
                         ),

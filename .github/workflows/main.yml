@@ -29,12 +29,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flet
+          pip install flet,flet-permission-handler,pyjnius
 
       - name: Build APK
         id: build-apk
         run: |
-          flet build apk --split-per-abi --verbose || flet build apk --debug --split-per-abi --verbose
+          flet build apk --debug --split-per-abi --verbose
 
       - name: List APK files
         if: success()

@@ -25,7 +25,6 @@ permissions = [
 
 include_packages = [
     "flet-permission-handler",
-    "jnius",
     "pyjnius",
 ]
 

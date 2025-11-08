@@ -218,6 +218,7 @@ class WallpaperApp:
         self.is_loading = False
         self.storage_permission_granted = False
         
+        
         logger.info("App initialized")
         
         # Try to import the new permission handler package

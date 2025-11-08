@@ -1,10 +1,12 @@
 import flet as ft
 
+import flet_permission_handler as fph
+
 
 def main(page: ft.Page):
     page.scroll = ft.ScrollMode.ADAPTIVE
     page.appbar = ft.AppBar(title=ft.Text("PermissionHandler Tests"))
-    ph = ft.PermissionHandler()
+    ph = fph.PermissionHandler()
     page.overlay.append(ph)
 
     def check_permission(e):
@@ -22,12 +24,12 @@ def main(page: ft.Page):
     page.add(
         ft.OutlinedButton(
             "Check Microphone Permission",
-            data=ft.PermissionType.MICROPHONE,
+            data=fph.PermissionType.MICROPHONE,
             on_click=check_permission,
         ),
         ft.OutlinedButton(
             "Request Microphone Permission",
-            data=ft.PermissionType.MICROPHONE,
+            data=fph.PermissionType.MICROPHONE,
             on_click=request_permission,
         ),
         ft.OutlinedButton(

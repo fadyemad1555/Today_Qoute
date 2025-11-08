@@ -220,6 +220,18 @@ class WallpaperApp:
         
         logger.info("App initialized")
         
+        # Try to import the new permission handler package
+        self.permission_handler = None
+        self.has_permission_handler = False
+        
+        try:
+            from flet_permissions import PermissionHandler
+            self.permission_handler = PermissionHandler()
+            self.has_permission_handler = True
+            logger.info("✓ flet-permission-handler loaded")
+        except ImportError:
+            logger.warning("⚠ flet-permission-handler not installed. Install with: pip install flet-permission-handler")
+        
         self.status_text = ft.Text("", size=13, weight=ft.FontWeight.W_500, text_align=ft.TextAlign.CENTER)
         self.status_icon = ft.Icon(ft.Icons.INFO_OUTLINE, size=18)
         self.loading_ring = ft.ProgressRing(visible=False, width=20, height=20, stroke_width=3, color=ft.Colors.CYAN_400)
@@ -261,32 +273,142 @@ class WallpaperApp:
             logger.error(f"Snackbar error: {e}")
     
     async def check_permissions(self):
-        """Check permissions"""
+        """Check and request permissions using flet-permission-handler"""
         try:
-            logger.info("Checking permissions")
+            logger.info("=" * 50)
+            logger.info("CHECKING PERMISSIONS")
+            logger.info("=" * 50)
             
             if not IS_ANDROID:
                 self.storage_permission_granted = True
+                logger.info("✓ Non-Android platform, permissions not required")
                 return True
             
+            # If permission handler is not available, do basic check
+            if not self.has_permission_handler or not self.permission_handler:
+                logger.warning("Permission handler not available, using basic check")
+                return await self.check_permissions_basic()
+            
+            # Use the new permission handler
             try:
-                test_file = os.path.join(tempfile.gettempdir(), 'test.tmp')
-                with open(test_file, 'w') as f:
-                    f.write('test')
-                os.remove(test_file)
+                # Check current storage permission status
+                logger.info("Checking STORAGE permission status...")
+                status = await self.permission_handler.check_permission(ft.PermissionType.STORAGE)
+                logger.info(f"Storage permission status: {status}")
                 
-                self.storage_permission_granted = True
-                logger.info("Storage verified")
-                return True
+                if status == ft.PermissionStatus.GRANTED:
+                    self.storage_permission_granted = True
+                    logger.info("✓ Storage permission already granted")
+                    self.show_snackbar("✅ Storage permission granted", ft.Colors.GREEN_700)
+                    return True
+                
+                elif status == ft.PermissionStatus.DENIED:
+                    # Permission denied but can be requested
+                    logger.info("Storage permission denied, requesting...")
+                    self.show_snackbar("📋 Requesting storage permission...", ft.Colors.BLUE_700)
+                    
+                    # Request permission
+                    result = await self.permission_handler.request_permission(ft.PermissionType.STORAGE)
+                    logger.info(f"Permission request result: {result}")
+                    
+                    if result == ft.PermissionStatus.GRANTED:
+                        self.storage_permission_granted = True
+                        logger.info("✓ Storage permission granted by user")
+                        self.show_snackbar("✅ Permission granted!", ft.Colors.GREEN_700)
+                        return True
+                    else:
+                        self.storage_permission_granted = False
+                        logger.warning("✗ Storage permission denied by user")
+                        self.show_snackbar("⚠️ Storage permission denied", ft.Colors.ORANGE_700)
+                        return False
+                
+                elif status == ft.PermissionStatus.PERMANENTLY_DENIED:
+                    # Permission permanently denied, need to open settings
+                    logger.warning("Storage permission permanently denied")
+                    self.storage_permission_granted = False
+                    self.show_snackbar("⚠️ Permission denied. Open settings to enable.", ft.Colors.RED_700)
+                    return False
+                
+                elif status == ft.PermissionStatus.LIMITED:
+                    # Limited access (iOS only, but handle gracefully)
+                    logger.info("Limited storage access granted")
+                    self.storage_permission_granted = True
+                    return True
+                
+                else:
+                    # Unknown status
+                    logger.warning(f"Unknown permission status: {status}")
+                    return await self.check_permissions_basic()
+                    
             except Exception as e:
-                logger.warning(f"Storage test failed: {e}")
-                self.show_snackbar("⚠️ Storage permission needed", ft.Colors.ORANGE_700)
-                return False
+                log_error("Permission handler error", e)
+                logger.info("Falling back to basic permission check")
+                return await self.check_permissions_basic()
                 
         except Exception as e:
             log_error("Permission check failed", e)
+            # Assume granted if check fails
             self.storage_permission_granted = True
             return True
+    
+    async def check_permissions_basic(self):
+        """Basic permission check without permission handler"""
+        logger.info("Using basic permission check")
+        try:
+            test_file = os.path.join(tempfile.gettempdir(), 'wallpaper_test.tmp')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            
+            self.storage_permission_granted = True
+            logger.info("✓ Storage write test successful")
+            return True
+        except Exception as e:
+            logger.warning(f"✗ Storage write test failed: {e}")
+            self.show_snackbar("⚠️ Storage permission may be needed", ft.Colors.ORANGE_700)
+            self.storage_permission_granted = False
+            return False
+    
+    async def open_app_settings(self, e):
+        """Open app settings"""
+        try:
+            logger.info("Opening app settings...")
+            
+            if self.has_permission_handler and self.permission_handler:
+                # Use permission handler to open settings
+                success = await self.permission_handler.open_app_settings()
+                if success:
+                    logger.info("✓ App settings opened")
+                    self.show_snackbar("📱 Opening settings...", ft.Colors.BLUE_700)
+                else:
+                    logger.warning("Failed to open settings via permission handler")
+                    self.show_snackbar("❌ Could not open settings", ft.Colors.RED_700)
+            else:
+                # Fallback for Android without permission handler
+                if IS_ANDROID:
+                    try:
+                        from jnius import autoclass
+                        Intent = autoclass('android.content.Intent')
+                        Settings = autoclass('android.provider.Settings')
+                        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                        Uri = autoclass('android.net.Uri')
+                        
+                        intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        package_name = PythonActivity.mActivity.getPackageName()
+                        intent.setData(Uri.parse(f"package:{package_name}"))
+                        PythonActivity.mActivity.startActivity(intent)
+                        
+                        logger.info("✓ App settings opened (Android API)")
+                        self.show_snackbar("📱 Opening settings...", ft.Colors.BLUE_700)
+                    except Exception as android_error:
+                        logger.error(f"Android settings error: {android_error}")
+                        self.show_snackbar("❌ Could not open settings", ft.Colors.RED_700)
+                else:
+                    self.show_snackbar("⚠️ Settings not available on this platform", ft.Colors.ORANGE_700)
+                    
+        except Exception as e:
+            log_error("Failed to open settings", e)
+            self.show_snackbar("❌ Could not open settings", ft.Colors.RED_700)
     
     def show_status(self, message: str, color: str, icon: str = ft.Icons.INFO_OUTLINE):
         """Update status"""
@@ -343,7 +465,7 @@ class WallpaperApp:
             ft.Container(
                 content=ft.Column([
                     ft.Text(f"Error {len(error_log) - i}", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400),
-                    ft.Text(error, size=10, selectable=True, color=ft.Colors.GREY_300),
+                    ft.Text(error[:300] + "..." if len(error) > 300 else error, size=10, selectable=True, color=ft.Colors.GREY_300),
                 ], spacing=4),
                 padding=10,
                 bgcolor=ft.Colors.GREY_900,
@@ -434,10 +556,11 @@ class WallpaperApp:
             logger.info(f"Setting: {self.selected_image}")
             
             if not self.storage_permission_granted:
-                self.show_status("Checking...", ft.Colors.CYAN_400, ft.Icons.SECURITY)
+                self.show_status("Checking permissions...", ft.Colors.CYAN_400, ft.Icons.SECURITY)
                 has_perm = await self.check_permissions()
                 
                 if not has_perm:
+                    logger.warning("Permission denied, showing dialog")
                     self.show_permission_dialog()
                     return
             
@@ -494,25 +617,38 @@ class WallpaperApp:
             dlg.open = False
             self.page.update()
         
+        async def open_settings_and_close(e):
+            await self.open_app_settings(e)
+            await asyncio.sleep(0.5)
+            close_dlg(e)
+        
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Row([
                 ft.Icon(ft.Icons.LOCK_OUTLINE, color=ft.Colors.ORANGE_400, size=28),
-                ft.Text("Permission Required", weight=ft.FontWeight.BOLD, size=18),
+                ft.Text("Storage Permission Required", weight=ft.FontWeight.BOLD, size=18),
             ], spacing=10),
             content=ft.Container(
                 content=ft.Column([
-                    ft.Text("Storage permission needed for:", size=14, weight=ft.FontWeight.W_500),
+                    ft.Text("Wallpaper Studio needs storage permission to:", size=14, weight=ft.FontWeight.W_500),
                     ft.Container(height=8),
-                    ft.Row([ft.Icon(ft.Icons.DOWNLOAD, size=20, color=ft.Colors.CYAN_400), ft.Text("Download images", size=13)], spacing=10),
-                    ft.Row([ft.Icon(ft.Icons.SAVE, size=20, color=ft.Colors.CYAN_400), ft.Text("Cache images", size=13)], spacing=10),
-                    ft.Row([ft.Icon(ft.Icons.WALLPAPER, size=20, color=ft.Colors.CYAN_400), ft.Text("Set wallpapers", size=13)], spacing=10),
+                    ft.Row([ft.Icon(ft.Icons.DOWNLOAD, size=20, color=ft.Colors.CYAN_400), ft.Text("Download wallpaper images", size=13)], spacing=10),
+                    ft.Row([ft.Icon(ft.Icons.SAVE, size=20, color=ft.Colors.CYAN_400), ft.Text("Cache images for faster access", size=13)], spacing=10),
+                    ft.Row([ft.Icon(ft.Icons.WALLPAPER, size=20, color=ft.Colors.CYAN_400), ft.Text("Set wallpapers on your device", size=13)], spacing=10),
+                    ft.Container(height=12),
+                    ft.Text(
+                        "Please grant storage permission to continue." if not self.has_permission_handler 
+                        else "Click 'Open Settings' to enable storage permission.",
+                        size=12,
+                        color=ft.Colors.GREY_400,
+                        italic=True,
+                    ),
                 ], spacing=8),
                 padding=10,
             ),
             actions=[
                 ft.TextButton("Cancel", on_click=close_dlg),
-                ft.FilledButton("OK", on_click=close_dlg),
+                ft.FilledButton("Open Settings", icon=ft.Icons.SETTINGS, on_click=open_settings_and_close),
             ],
         )
         
@@ -603,6 +739,12 @@ class WallpaperApp:
     
     def build(self) -> ft.Control:
         """Build UI"""
+        
+        # Add permission handler to overlay if available
+        if self.permission_handler:
+            self.page.overlay.append(self.permission_handler)
+            logger.info("✓ Permission handler added to page overlay")
+        
         header = ft.Container(
             content=ft.Row([
                 ft.Container(
@@ -629,7 +771,7 @@ class WallpaperApp:
                 ft.Row([self.status_icon, self.status_text], spacing=8, alignment=ft.MainAxisAlignment.CENTER),
                 self.progress_bar,
                 ft.Row([
-                    ft.IconButton(icon=ft.Icons.CLEAR, tooltip="Clear", icon_size=24, on_click=self.clear_selection, bgcolor=ft.Colors.GREY_800),
+                    ft.IconButton(icon=ft.Icons.CLEAR, tooltip="Clear Selection", icon_size=24, on_click=self.clear_selection, bgcolor=ft.Colors.GREY_800),
                     ft.Container(
                         content=ft.Row([
                             self.loading_ring,
@@ -643,7 +785,7 @@ class WallpaperApp:
                         on_click=self.set_wallpaper_async,
                         expand=True,
                     ),
-                    ft.IconButton(icon=ft.Icons.BUG_REPORT, tooltip="Logs", icon_size=24, on_click=self.show_error_dialog, bgcolor=ft.Colors.GREY_800),
+                    ft.IconButton(icon=ft.Icons.BUG_REPORT, tooltip="Error Logs", icon_size=24, on_click=self.show_error_dialog, bgcolor=ft.Colors.GREY_800),
                 ], spacing=10),
             ], spacing=10),
             padding=16,
@@ -681,13 +823,14 @@ def main(page: ft.Page):
         async def check_on_start():
             await asyncio.sleep(0.5)
             if IS_ANDROID:
-                app.show_status("Checking...", ft.Colors.CYAN_400, ft.Icons.SECURITY)
+                app.show_status("Checking permissions...", ft.Colors.CYAN_400, ft.Icons.SECURITY)
                 await app.check_permissions()
                 app.show_status(f"Ready • {len(app.images)} images", ft.Colors.GREY_400, ft.Icons.CHECK_CIRCLE_OUTLINE)
         
         page.run_task(check_on_start)
         
         logger.info(f"App started | Platform: {'Android' if IS_ANDROID else 'Desktop'} | Images: {len(app.images)}")
+        logger.info(f"Permission handler: {'Loaded' if app.has_permission_handler else 'Not available'}")
         logger.info(f"Log file: {LOG_FILE}")
         
     except Exception as e:

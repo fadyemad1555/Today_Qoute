@@ -1,2 +1,3 @@
 flet
 pyjnius
+flet-permission-handler

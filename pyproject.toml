@@ -23,12 +23,9 @@ permissions = [
     "android.permission.SET_WALLPAPER",
 ]
 
-include_packages = [
-    "flet",
-    "pyjnius",
-]
+include_packages = ["pyjnius"]
 
-dependencies=["flet-permission-handler"]
+dependencies=["flet","flet-permission-handler"]
 
 min_sdk_version = 26
 target_sdk_version = 35

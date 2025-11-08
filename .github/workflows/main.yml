@@ -34,7 +34,10 @@ jobs:
       - name: Build APK
         id: build-apk
         run: |
-          flet build apk --split-per-abi --verbose 
+          flet build apk --split-per-abi --verbose \
+          --android-permissions android.permission.READ_EXTERNAL_STORAGE=True \
+          android.permission.WRITE_EXTERNAL_STORAGE=True \
+          --android-features android.hardware.location.network=True
       - name: List APK files
         if: success()
         run: |

@@ -1,809 +1,517 @@
 import flet as ft
-import os
-import sys
-import tempfile
-from datetime import datetime
+import requests
+import time
+import random
 
-# Platform detection
-IS_ANDROID = False
-try:
-    if 'ANDROID_APP_PATH' in os.environ or 'ANDROID_ROOT' in os.environ:
-        IS_ANDROID = True
-    elif sys.platform.startswith('linux') and os.path.exists('/system/build.prop'):
-        IS_ANDROID = True
-except Exception as e:
-    print(f"Platform detection error: {e}")
 
-print(f"Platform: {'Android' if IS_ANDROID else 'Desktop'}")
+# Rate limiting and caching
+last_request_time = 0
+request_delay = 5.0  # 5 seconds between requests to avoid rate limits
+quote_cache = []
+cache_index = 0
+daily_quote_cache = None
+daily_quote_date = None
 
-class PermissionTestApp:
-    def __init__(self, page: ft.Page):
-        self.page = page
-        self.logs = []
-        
-        # UI Components - Initialize FIRST
-        self.log_container = ft.Column(
-            spacing=5,
-            scroll=ft.ScrollMode.AUTO,
-            height=400,
-        )
-        
-        self.status_text = ft.Text(
-            "جاهز لتجربة الطرق - Ready",
-            size=16,
-            weight=ft.FontWeight.BOLD,
-        )
-        
-        # Try to import permission handler AFTER UI components
-        self.permission_handler = None
-        self.has_permission_handler = False
-        
-        try:
-            import flet_permission_handler as fph
-            self.fph = fph
-            self.permission_handler = fph.PermissionHandler()
-            self.has_permission_handler = True
-            self.add_log("✓ flet-permission-handler loaded", "green")
-        except ImportError:
-            self.add_log("✗ flet-permission-handler not installed", "red")
-        
-        # Permission status
-        self.storage_granted = False
-        
-    def add_log(self, message: str, color: str = "white"):
-        """Add log entry"""
-        m=""
-        n=0
-        for x in message.split(" "):
-            m+=x
-            n+=1
-            if n==2:
-                n=0
-                m+="\n"
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        log_entry = ft.Container(
-            content=ft.Row([
-                ft.Text(f"[{timestamp}]", size=11, color="grey"),
-                ft.Text(m, size=12, color=color),
-            ], spacing=8),
-            padding=5,
-            bgcolor="#1a1a1a",
-            border_radius=5,
-        )
-        self.logs.append(log_entry)
-        self.log_container.controls.append(log_entry)
-        self.page.update()
-        print(f"[{timestamp}] {message}")
-    
-    async def run_method1(self, e):
-        """تشغيل الطريقة 1"""
-        await self.run_single_method(e, 1)
-    
-    async def run_method2(self, e):
-        """تشغيل الطريقة 2"""
-        await self.run_single_method(e, 2)
-    
-    async def run_method3(self, e):
-        """تشغيل الطريقة 3"""
-        await self.run_single_method(e, 3)
-    
-    async def run_method4(self, e):
-        """تشغيل الطريقة 4"""
-        await self.run_single_method(e, 4)
-    
-    async def run_method5(self, e):
-        """تشغيل الطريقة 5"""
-        await self.run_single_method(e, 5)
+# Built-in offline quotes as fallback
+OFFLINE_QUOTES = [
+    {"q": "The only way to do great work is to love what you do.", "a": "Steve Jobs"},
+    {"q": "Innovation distinguishes between a leader and a follower.", "a": "Steve Jobs"},
+    {"q": "Life is what happens when you're busy making other plans.", "a": "John Lennon"},
+    {"q": "The future belongs to those who believe in the beauty of their dreams.", "a": "Eleanor Roosevelt"},
+    {"q": "It is during our darkest moments that we must focus to see the light.", "a": "Aristotle"},
+    {"q": "The only impossible journey is the one you never begin.", "a": "Tony Robbins"},
+    {"q": "In the middle of difficulty lies opportunity.", "a": "Albert Einstein"},
+    {"q": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "a": "Winston Churchill"},
+    {"q": "Believe you can and you're halfway there.", "a": "Theodore Roosevelt"},
+    {"q": "The best time to plant a tree was 20 years ago. The second best time is now.", "a": "Chinese Proverb"},
+    {"q": "Your time is limited, don't waste it living someone else's life.", "a": "Steve Jobs"},
+    {"q": "The way to get started is to quit talking and begin doing.", "a": "Walt Disney"},
+    {"q": "Don't watch the clock; do what it does. Keep going.", "a": "Sam Levenson"},
+    {"q": "The future depends on what you do today.", "a": "Mahatma Gandhi"},
+    {"q": "Everything you've ever wanted is on the other side of fear.", "a": "George Addair"},
+    {"q": "Believe in yourself. You are braver than you think.", "a": "Unknown"},
+    {"q": "What we think, we become.", "a": "Buddha"},
+    {"q": "The journey of a thousand miles begins with one step.", "a": "Lao Tzu"},
+    {"q": "Life is 10% what happens to you and 90% how you react to it.", "a": "Charles R. Swindoll"},
+    {"q": "Change your thoughts and you change your world.", "a": "Norman Vincent Peale"},
+]
 
-    async def run_single_method(self, e, method_num):
-        """تشغيل طريقة واحدة محددة"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log(f"🚀 تشغيل الطريقة {method_num}", "yellow")
-            
-            if not IS_ANDROID:
-                self.add_log("❌ التطبيق يعمل فقط على أندرويد", "red")
-                self.status_text.value = "❌ أندرويد فقط"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            # الحصول على الصورة
-            image_path = self.get_test_image()
-            if not image_path:
-                self.add_log("❌ فشل تحميل الصورة", "red")
-                self.status_text.value = "❌ لا توجد صورة"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            # التحقق من الملف
-            if not os.path.exists(image_path):
-                self.add_log("❌ الصورة غير موجودة", "red")
-                self.status_text.value = "❌ الصورة غير موجودة"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            file_size = os.path.getsize(image_path) / 1024
-            self.add_log(f"📁 حجم الصورة: {file_size:.1f} كيلوبايت", "cyan")
-            
-            # تشغيل الطريقة المحددة
-            methods = {
-                1: ("الطريقة 1: Direct Bitmap", self.method1_direct_bitmap),
-                2: ("الطريقة 2: Input Stream", self.method2_input_stream),
-                3: ("الطريقة 3: Content URI", self.method3_content_uri),
-                4: ("الطريقة 4: With Scaling", self.method4_with_scaling),
-                5: ("الطريقة 5: Intent", self.method5_intent),
-            }
-            
-            method_name, method_func = methods[method_num]
-            self.add_log(f"▶️ جاري تشغيل {method_name}...", "cyan")
-            
-            success = await method_func(image_path)
-            
-            if success:
-                self.add_log(f"🎉 نجحت {method_name}!", "green")
-                self.status_text.value = f"✅ نجح: {method_name}"
-                self.status_text.color = "green"
-            else:
-                self.add_log(f"❌ فشلت {method_name}", "red")
-                self.status_text.value = f"❌ فشل: {method_name}"
-                self.status_text.color = "red"
-            
-            self.page.update()
-            
-        except Exception as e:
-            self.add_log(f"❌ خطأ: {str(e)}", "red")
-            self.status_text.value = "❌ حدث خطأ"
-            self.status_text.color = "red"
-            self.page.update()
-    
-        """Check storage permission"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("CHECKING STORAGE PERMISSION", "yellow")
-            
-            if not IS_ANDROID:
-                self.add_log("Not Android - permissions not required", "green")
-                self.storage_granted = True
-                self.status_text.value = "✅ Not Android - No permissions needed"
-                self.status_text.color = "green"
-                self.page.update()
-                return
-            
-            if not self.has_permission_handler:
-                self.add_log("❌ Permission handler not available", "red")
-                self.status_text.value = "❌ Install flet-permission-handler"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            self.add_log("Checking STORAGE permission...", "cyan")
-            status = await self.permission_handler.check_permission(
-                self.fph.PermissionType.STORAGE
-            )
-            
-            self.add_log(f"Status: {status}", "yellow")
-            
-            if status == self.fph.PermissionStatus.GRANTED:
-                self.add_log("✅ STORAGE permission GRANTED", "green")
-                self.storage_granted = True
-                self.status_text.value = "✅ Storage Permission Granted"
-                self.status_text.color = "green"
-            elif status == self.fph.PermissionStatus.DENIED:
-                self.add_log("⚠️ STORAGE permission DENIED", "orange")
-                self.storage_granted = False
-                self.status_text.value = "⚠️ Storage Permission Denied"
-                self.status_text.color = "orange"
-            elif status == self.fph.PermissionStatus.PERMANENTLY_DENIED:
-                self.add_log("🚫 STORAGE permission PERMANENTLY DENIED", "red")
-                self.storage_granted = False
-                self.status_text.value = "🚫 Permission Permanently Denied"
-                self.status_text.color = "red"
-            else:
-                self.add_log(f"❓ Unknown status: {status}", "orange")
-                self.storage_granted = False
-                self.status_text.value = "❓ Unknown Permission Status"
-                self.status_text.color = "orange"
-            
-            self.page.update()
-            
-        except Exception as e:
-            self.add_log(f"❌ Error: {str(e)}", "red")
-            self.status_text.value = "❌ Error checking permission"
-            self.status_text.color = "red"
-            self.page.update()
-    
-    async def request_storage_permission(self, e):
-        """Request storage permission"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("REQUESTING STORAGE PERMISSION", "yellow")
-            
-            if not IS_ANDROID:
-                self.add_log("Not Android - no request needed", "green")
-                return
-            
-            if not self.has_permission_handler:
-                self.add_log("❌ Permission handler not available", "red")
-                return
-            
-            self.add_log("Requesting STORAGE permission...", "cyan")
-            result = await self.permission_handler.request_permission(
-                self.fph.PermissionType.STORAGE
-            )
-            
-            self.add_log(f"Result: {result}", "yellow")
-            
-            if result == self.fph.PermissionStatus.GRANTED:
-                self.add_log("✅ Permission GRANTED by user", "green")
-                self.storage_granted = True
-                self.status_text.value = "✅ Permission Granted!"
-                self.status_text.color = "green"
-            else:
-                self.add_log("❌ Permission DENIED by user", "red")
-                self.storage_granted = False
-                self.status_text.value = "❌ Permission Denied"
-                self.status_text.color = "red"
-            
-            self.page.update()
-            
-        except Exception as e:
-            self.add_log(f"❌ Error: {str(e)}", "red")
-            self.status_text.value = "❌ Error requesting permission"
-            self.status_text.color = "red"
-            self.page.update()
-    
-    async def test_file_write(self, e):
-        """Test file write capability"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("TESTING FILE WRITE", "yellow")
-            
-            test_dir = tempfile.gettempdir()
-            test_file = os.path.join(test_dir, "wallpaper_test.txt")
-            
-            self.add_log(f"Test directory: {test_dir}", "cyan")
-            self.add_log(f"Test file: {test_file}", "cyan")
-            
-            # Write test
-            self.add_log("Writing test file...", "cyan")
-            with open(test_file, 'w') as f:
-                f.write(f"Test write at {datetime.now()}")
-            self.add_log("✅ Write successful", "green")
-            
-            # Read test
-            self.add_log("Reading test file...", "cyan")
-            with open(test_file, 'r') as f:
-                content = f.read()
-            self.add_log(f"✅ Read successful: {content[:30]}", "green")
-            
-            # Delete test
-            self.add_log("Deleting test file...", "cyan")
-            os.remove(test_file)
-            self.add_log("✅ Delete successful", "green")
-            
-            self.status_text.value = "✅ File Operations Successful"
-            self.status_text.color = "green"
-            self.page.update()
-            
-        except Exception as e:
-            self.add_log(f"❌ File operation failed: {str(e)}", "red")
-            self.status_text.value = "❌ File Operations Failed"
-            self.status_text.color = "red"
-            self.page.update()
 
-    def get_test_image(self):
-        """Get or download test image"""
-        try:
-            test_dir = tempfile.gettempdir()
-            test_image = os.path.join(test_dir, "wallpaper_test.jpg")
-            
-            # Check if image already exists
-            if os.path.exists(test_image) and os.path.getsize(test_image) > 1000:
-                self.add_log(f"✅ استخدام صورة موجودة", "green")
-                return test_image
-            
-            # Look for any existing image files
-            self.add_log(f"🔍 البحث عن صور في: {test_dir}", "cyan")
-            for file in os.listdir(test_dir):
-                if file.endswith(('.jpg', '.jpeg', '.png')):
-                    existing_image = os.path.join(test_dir, file)
-                    if os.path.getsize(existing_image) > 1000:
-                        self.add_log(f"✅ تم العثور على: {file}", "green")
-                        return existing_image
-            
-            # Download sample image
-            self.add_log("⬇️ جاري تحميل صورة تجريبية...", "cyan")
-            import urllib.request
-            
-            sample_url = "https://images.pexels.com/photos/1103970/pexels-photo-1103970.jpeg?auto=compress&cs=tinysrgb&w=400"
-            
-            req = urllib.request.Request(sample_url)
-            req.add_header('User-Agent', 'Mozilla/5.0')
-            
-            with urllib.request.urlopen(req, timeout=15) as response:
-                data = response.read()
-                with open(test_image, 'wb') as f:
-                    f.write(data)
-            
-            self.add_log(f"✅ تم التحميل: {len(data)} بايت", "green")
-            return test_image
-            
-        except Exception as e:
-            self.add_log(f"❌ خطأ في الصورة: {str(e)}", "red")
+def can_make_request():
+    """Check if enough time has passed since last request"""
+    global last_request_time
+    current_time = time.time()
+    time_since_last = current_time - last_request_time
+    
+    if time_since_last < request_delay:
+        return False, request_delay - time_since_last
+    return True, 0
+
+
+def safe_api_request(url, timeout=8):
+    """Make a safe API request with rate limiting"""
+    global last_request_time
+    
+    can_request, wait_time = can_make_request()
+    
+    if not can_request:
+        print(f"Rate limited: waiting {wait_time:.1f}s before next request")
+        return None
+    
+    try:
+        response = requests.get(url, timeout=timeout)
+        last_request_time = time.time()
+        
+        if response.status_code == 429:
+            print("Rate limit hit (429), using cache/offline quotes")
             return None
-
-    async def method1_direct_bitmap(self, image_path):
-        """الطريقة 1: تعيين مباشر باستخدام Bitmap"""
-        try:
-            self.add_log("--- الطريقة 1: Direct setBitmap ---", "yellow")
-            
-            from jnius import autoclass, cast
-            
-            # Get Android classes
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            WallpaperManager = autoclass('android.app.WallpaperManager')
-            BitmapFactory = autoclass('android.graphics.BitmapFactory')
-            
-            # Get context
-            activity = cast('android.app.Activity', PythonActivity.mActivity)
-            context = cast('android.content.Context', activity.getApplicationContext())
-            
-            self.add_log("🔄 فك تشفير الصورة...", "cyan")
-            bitmap = BitmapFactory.decodeFile(image_path)
-            
-            if not bitmap:
-                raise Exception("فشل فك تشفير الصورة")
-            
-            self.add_log(f"✅ الصورة: {bitmap.getWidth()}x{bitmap.getHeight()}", "green")
-            
-            # تعيين الخلفية
-            self.add_log("📱 جاري تعيين الخلفية...", "cyan")
-            manager = WallpaperManager.getInstance(context)
-            manager.setBitmap(bitmap)
-            bitmap.recycle()
-            
-            self.add_log("✅ نجحت الطريقة 1!", "green")
-            return True
-            
-        except Exception as e:
-            self.add_log(f"❌ فشلت الطريقة 1: {str(e)}", "red")
-            return False
-
-    async def method2_input_stream(self, image_path):
-        """الطريقة 2: باستخدام InputStream"""
-        try:
-            self.add_log("--- الطريقة 2: InputStream ---", "yellow")
-            
-            from jnius import autoclass, cast
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            WallpaperManager = autoclass('android.app.WallpaperManager')
-            FileInputStream = autoclass('java.io.FileInputStream')
-            File = autoclass('java.io.File')
-            
-            activity = cast('android.app.Activity', PythonActivity.mActivity)
-            context = cast('android.content.Context', activity.getApplicationContext())
-            
-            # Create file input stream
-            self.add_log("🔄 إنشاء stream...", "cyan")
-            file = File(image_path)
-            stream = FileInputStream(file)
-            
-            # Set wallpaper from stream
-            self.add_log("📱 تعيين الخلفية من stream...", "cyan")
-            manager = WallpaperManager.getInstance(context)
-            manager.setStream(stream)
-            stream.close()
-            
-            self.add_log("✅ نجحت الطريقة 2!", "green")
-            return True
-            
-        except Exception as e:
-            self.add_log(f"❌ فشلت الطريقة 2: {str(e)}", "red")
-            return False
-
-    async def method3_content_uri(self, image_path):
-        """الطريقة 3: باستخدام Content URI"""
-        try:
-            self.add_log("--- الطريقة 3: Content URI ---", "yellow")
-            
-            from jnius import autoclass, cast
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            WallpaperManager = autoclass('android.app.WallpaperManager')
-            BitmapFactory = autoclass('android.graphics.BitmapFactory')
-            File = autoclass('java.io.File')
-            Uri = autoclass('android.net.Uri')
-            
-            activity = cast('android.app.Activity', PythonActivity.mActivity)
-            context = cast('android.content.Context', activity.getApplicationContext())
-            
-            # Create URI
-            self.add_log("🔗 إنشاء URI...", "cyan")
-            file = File(image_path)
-            uri = Uri.fromFile(file)
-            
-            self.add_log(f"URI: {uri.toString()}", "cyan")
-            
-            # Open input stream from URI
-            self.add_log("🔄 فتح stream من URI...", "cyan")
-            resolver = context.getContentResolver()
-            stream = resolver.openInputStream(uri)
-            
-            # Decode bitmap
-            bitmap = BitmapFactory.decodeStream(stream)
-            stream.close()
-            
-            if not bitmap:
-                raise Exception("فشل فك التشفير من URI")
-            
-            # Set wallpaper
-            self.add_log("📱 تعيين الخلفية...", "cyan")
-            manager = WallpaperManager.getInstance(context)
-            manager.setBitmap(bitmap)
-            bitmap.recycle()
-            
-            self.add_log("✅ نجحت الطريقة 3!", "green")
-            return True
-            
-        except Exception as e:
-            self.add_log(f"❌ فشلت الطريقة 3: {str(e)}", "red")
-            return False
-
-    async def method4_with_scaling(self, image_path):
-        """الطريقة 4: مع تغيير الحجم"""
-        try:
-            self.add_log("--- الطريقة 4: With Scaling ---", "yellow")
-            
-            from jnius import autoclass, cast
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            WallpaperManager = autoclass('android.app.WallpaperManager')
-            BitmapFactory = autoclass('android.graphics.BitmapFactory')
-            Options = autoclass('android.graphics.BitmapFactory$Options')
-            Bitmap = autoclass('android.graphics.Bitmap')
-            Config = autoclass('android.graphics.Bitmap$Config')
-            Canvas = autoclass('android.graphics.Canvas')
-            Paint = autoclass('android.graphics.Paint')
-            
-            activity = cast('android.app.Activity', PythonActivity.mActivity)
-            context = cast('android.content.Context', activity.getApplicationContext())
-            
-            # Get screen dimensions
-            display = activity.getWindowManager().getDefaultDisplay()
-            width = display.getWidth()
-            height = display.getHeight()
-            self.add_log(f"📱 الشاشة: {width}x{height}", "cyan")
-            
-            # Decode with bounds first
-            self.add_log("🔍 فحص أبعاد الصورة...", "cyan")
-            options = Options()
-            options.inJustDecodeBounds = True
-            BitmapFactory.decodeFile(image_path, options)
-            
-            img_width = options.outWidth
-            img_height = options.outHeight
-            self.add_log(f"🖼️ الصورة: {img_width}x{img_height}", "cyan")
-            
-            # Calculate sample size
-            sample_size = 1
-            if img_width > width or img_height > height:
-                sample_size = max(img_width // width, img_height // height)
-            
-            self.add_log(f"📏 حجم العينة: {sample_size}", "cyan")
-            
-            # Decode with sample size
-            options.inJustDecodeBounds = False
-            options.inSampleSize = sample_size
-            bitmap = BitmapFactory.decodeFile(image_path, options)
-            
-            if not bitmap:
-                raise Exception("فشل فك تشفير الصورة")
-            
-            self.add_log(f"✅ تم الفك: {bitmap.getWidth()}x{bitmap.getHeight()}", "green")
-            
-            # Set wallpaper
-            self.add_log("📱 تعيين الخلفية...", "cyan")
-            manager = WallpaperManager.getInstance(context)
-            manager.setBitmap(bitmap)
-            bitmap.recycle()
-            
-            self.add_log("✅ نجحت الطريقة 4!", "green")
-            return True
-            
-        except Exception as e:
-            self.add_log(f"❌ فشلت الطريقة 4: {str(e)}", "red")
-            return False
-
-    async def method5_intent(self, image_path):
-        """الطريقة 5: باستخدام Intent (الأكثر موثوقية)"""
-        try:
-            self.add_log("--- الطريقة 5: Intent ---", "yellow")
-            
-            from jnius import autoclass, cast
-            
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            
-            activity = cast('android.app.Activity', PythonActivity.mActivity)
-            
-            # Create URI
-            file = File(image_path)
-            uri = Uri.fromFile(file)
-            
-            # Create intent
-            self.add_log("📲 إنشاء Intent للخلفية...", "cyan")
-            intent = Intent(Intent.ACTION_ATTACH_DATA)
-            intent.setDataAndType(uri, "image/*")
-            intent.putExtra("mimeType", "image/*")
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            
-            # Start chooser
-            self.add_log("🚀 فتح قائمة الاختيار...", "cyan")
-            chooser = Intent.createChooser(intent, "تعيين كخلفية")
-            activity.startActivity(chooser)
-            
-            self.add_log("✅ تم إرسال Intent!", "green")
-            self.add_log("⚠️ اختر 'خلفية الشاشة' من القائمة", "yellow")
-            return True
-            
-        except Exception as e:
-            self.add_log(f"❌ فشلت الطريقة 5: {str(e)}", "red")
-            return False
-    
-    async def test_set_wallpaper(self, e):
-        """تجربة جميع الطرق تلقائياً"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("🔄 تجربة جميع الطرق تلقائياً", "yellow")
-            
-            if not IS_ANDROID:
-                self.add_log("❌ يعمل فقط على أندرويد", "red")
-                self.status_text.value = "❌ أندرويد فقط"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            # Get test image
-            image_path = self.get_test_image()
-            if not image_path:
-                self.add_log("❌ لا توجد صورة اختبار", "red")
-                self.status_text.value = "❌ لا توجد صورة"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            # Verify file
-            if not os.path.exists(image_path):
-                self.add_log("❌ الصورة غير موجودة", "red")
-                self.status_text.value = "❌ الصورة غير موجودة"
-                self.status_text.color = "red"
-                self.page.update()
-                return
-            
-            file_size = os.path.getsize(image_path) / 1024
-            self.add_log(f"📁 الصورة: {file_size:.1f} كيلوبايت", "cyan")
-            self.add_log(f"📂 المسار: {image_path}", "cyan")
-            
-            # Try methods in order
-            methods = [
-                ("الطريقة 1: Direct Bitmap", self.method1_direct_bitmap),
-                ("الطريقة 2: Input Stream", self.method2_input_stream),
-                ("الطريقة 3: Content URI", self.method3_content_uri),
-                ("الطريقة 4: With Scaling", self.method4_with_scaling),
-                ("الطريقة 5: Intent", self.method5_intent),
-            ]
-            
-            for method_name, method_func in methods:
-                self.add_log(f"\n🔄 جاري تجربة {method_name}...", "cyan")
-                success = await method_func(image_path)
-                
-                if success:
-                    self.add_log(f"\n🎉 {method_name} نجحت!", "green")
-                    self.status_text.value = f"✅ نجح: {method_name}"
-                    self.status_text.color = "green"
-                    self.page.update()
-                    return
-                
-                # Small delay between methods
-                import asyncio
-                await asyncio.sleep(0.5)
-            
-            # If all failed
-            self.add_log("\n❌ فشلت جميع الطرق", "red")
-            self.status_text.value = "❌ فشلت جميع الطرق"
-            self.status_text.color = "red"
-            self.page.update()
-            
-        except Exception as e:
-            self.add_log(f"❌ خطأ كبير: {str(e)}", "red")
-            import traceback
-            tb = traceback.format_exc()
-            for line in tb.split('\n')[:5]:
-                if line.strip():
-                    self.add_log(line[:100], "red")
-            self.status_text.value = "❌ خطأ كبير"
-            self.status_text.color = "red"
-            self.page.update()
-    
-    async def open_settings(self, e):
-        """فتح إعدادات التطبيق"""
-        try:
-            self.add_log("=" * 50, "cyan")
-            self.add_log("⚙️ فتح الإعدادات", "yellow")
-            
-            if not IS_ANDROID:
-                self.add_log("❌ ليس أندرويد", "red")
-                return
-            
-            if self.has_permission_handler:
-                success = await self.permission_handler.open_app_settings()
-                if success:
-                    self.add_log("✅ تم فتح الإعدادات", "green")
-                else:
-                    self.add_log("❌ فشل فتح الإعدادات", "red")
-            else:
-                self.add_log("❌ معالج الأذونات غير متوفر", "red")
-            
-        except Exception as e:
-            self.add_log(f"❌ خطأ: {str(e)}", "red")
-    
-    def clear_logs(self, e):
-        """مسح جميع السجلات"""
-        self.logs.clear()
-        self.log_container.controls.clear()
-        self.add_log("تم مسح السجلات ✓", "cyan")
-        self.status_text.value = "جاهز لتجربة الطرق"
-        self.status_text.color = "white"
-        self.page.update()
-    
-    def build(self):
-        """Build UI"""
         
-        # Add permission handler to overlay if available
-        if self.permission_handler:
-            self.page.overlay.append(self.permission_handler)
-            print("✓ Permission handler added to overlay")
-        
-        return ft.Container(
-            content=ft.Column([
-                # Header
-                ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Icon(ft.Icons.SECURITY, size=40, color=ft.Colors.CYAN_400),
-                            ft.Column([
-                                ft.Text("اختبار الخلفيات", size=28, weight=ft.FontWeight.BOLD),
-                                ft.Text(f"المنصة: {'أندرويد' if IS_ANDROID else 'سطح المكتب'}", size=12, color=ft.Colors.GREY_400),
-                            ], spacing=2),
-                        ], spacing=15),
-                        ft.Container(height=10),
-                        self.status_text,
-                    ], spacing=5),
-                    padding=20,
-                    bgcolor=ft.Colors.BLUE_GREY_900,
-                    border_radius=10,
-                ),
-                
-                ft.Container(height=10),
-                
-                # Control Buttons
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("طرق تعيين الخلفية - Wallpaper Methods", size=16, weight=ft.FontWeight.BOLD),
-                        
-                        ft.ElevatedButton(
-                            "الطريقة 1: Direct Bitmap",
-                            icon=ft.Icons.IMAGE,
-                            on_click=self.run_method1,
-                            width=300,
-                            bgcolor=ft.Colors.BLUE_700,
-                        ),
-                        
-                        ft.ElevatedButton(
-                            "الطريقة 2: Input Stream",
-                            icon=ft.Icons.STREAM,
-                            on_click=self.run_method2,
-                            width=300,
-                            bgcolor=ft.Colors.GREEN_700,
-                        ),
-                        
-                        ft.ElevatedButton(
-                            "الطريقة 3: Content URI",
-                            icon=ft.Icons.LINK,
-                            on_click=self.run_method3,
-                            width=300,
-                            bgcolor=ft.Colors.ORANGE_700,
-                        ),
-                        
-                        ft.ElevatedButton(
-                            "الطريقة 4: With Scaling",
-                            icon=ft.Icons.PHOTO_SIZE_SELECT_LARGE,
-                            on_click=self.run_method4,
-                            width=300,
-                            bgcolor=ft.Colors.PURPLE_700,
-                        ),
-                        
-                        ft.ElevatedButton(
-                            "الطريقة 5: Intent (موصى بها)",
-                            icon=ft.Icons.OPEN_IN_NEW,
-                            on_click=self.run_method5,
-                            width=300,
-                            bgcolor=ft.Colors.RED_700,
-                        ),
-                        
-                        ft.Divider(height=20),
-                        
-                        ft.ElevatedButton(
-                            "🔄 جرب كل الطرق تلقائياً",
-                            icon=ft.Icons.AUTORENEW,
-                            on_click=self.test_set_wallpaper,
-                            width=300,
-                            bgcolor=ft.Colors.CYAN_700,
-                        ),
-                        
-                        ft.Divider(height=20),
-                        
-                        ft.Row([
-                            ft.ElevatedButton(
-                                "⚙️ الإعدادات",
-                                icon=ft.Icons.SETTINGS,
-                                on_click=self.open_settings,
-                            ),
-                            ft.ElevatedButton(
-                                "🗑️ مسح السجل",
-                                icon=ft.Icons.CLEAR,
-                                on_click=self.clear_logs,
-                            ),
-                        ], spacing=10),
-                    ], spacing=8, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=20,
-                    bgcolor=ft.Colors.BLUE_GREY_900,
-                    border_radius=10,
-                ),
-                
-                ft.Container(height=10),
-                
-                # Log Container
-                ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Icon(ft.Icons.TERMINAL, size=20),
-                            ft.Text("سجل النشاط - Activity Log", size=16, weight=ft.FontWeight.BOLD),
-                        ], spacing=10),
-                        ft.Divider(height=1),
-                        self.log_container,
-                    ], spacing=10),
-                    padding=15,
-                    bgcolor=ft.Colors.BLUE_GREY_900,
-                    border_radius=10,
-                    expand=True,
-                ),
-                
-            ], spacing=10, expand=True, scroll=ft.ScrollMode.AUTO),
-            padding=20,
-            expand=True,
-        )
+        response.raise_for_status()
+        return response
+    except Exception as e:
+        print(f"API request failed: {e}")
+        return None
+
+
+def get_random_quote():
+    """Fetch random quote with intelligent caching"""
+    global quote_cache, cache_index
+    
+    # Use cache if available
+    if quote_cache and cache_index < len(quote_cache):
+        quote = quote_cache[cache_index]
+        cache_index += 1
+        return {
+            "text": quote['q'],
+            "author": quote['a'],
+            "source": "Random Quote",
+            "success": True
+        }
+    
+    # Try to fetch new quotes if cache is empty
+    response = safe_api_request("https://zenquotes.io/api/quotes")
+    
+    if response:
+        try:
+            data = response.json()
+            if data and isinstance(data, list):
+                quote_cache = data
+                cache_index = 0
+                quote = random.choice(data)
+                return {
+                    "text": quote['q'],
+                    "author": quote['a'],
+                    "source": "Random Quote",
+                    "success": True
+                }
+        except Exception as e:
+            print(f"Failed to parse response: {e}")
+    
+    # Use offline quotes as fallback
+    quote = random.choice(OFFLINE_QUOTES)
+    return {
+        "text": quote['q'],
+        "author": quote['a'],
+        "source": "Offline Quote",
+        "success": True
+    }
+
+
+def get_quote_of_day():
+    """Fetch quote of the day with caching"""
+    global daily_quote_cache, daily_quote_date
+    
+    # Check if we have today's cached quote
+    import datetime
+    today = datetime.date.today().isoformat()
+    
+    if daily_quote_cache and daily_quote_date == today:
+        return daily_quote_cache
+    
+    # Try to fetch today's quote
+    response = safe_api_request("https://zenquotes.io/api/today")
+    
+    if response:
+        try:
+            data = response.json()
+            if data and isinstance(data, list):
+                result = {
+                    "text": data[0]['q'],
+                    "author": data[0]['a'],
+                    "source": "✨ Quote of the Day",
+                    "success": True
+                }
+                # Cache it
+                daily_quote_cache = result
+                daily_quote_date = today
+                return result
+        except Exception as e:
+            print(f"Failed to parse daily quote: {e}")
+    
+    # Fallback to random quote if API fails
+    return get_random_quote()
+
 
 def main(page: ft.Page):
-    page.title = "اختبار الخلفيات - Wallpaper Test"
+    # Page configuration
+    page.title = "Quote Explorer"
     page.theme_mode = ft.ThemeMode.DARK
-    page.padding = 0
-    page.bgcolor = "#0a0e1a"
+    page.window.width = 520
+    page.window.height = 720
+    page.padding = 30
+    page.bgcolor = "#0f172a"
     
-    app = PermissionTestApp(page)
-    page.add(app.build())
+    # Current quote data
+    current_quote = {"text": "", "author": "", "source": ""}
     
-    # Add initial log
-    app.add_log("✅ تم بدء التطبيق بنجاح", "green")
-    app.add_log(f"📱 المنصة: {'أندرويد' if IS_ANDROID else 'سطح المكتب'}", "cyan")
-    app.add_log(f"🔧 معالج الأذونات: {'متوفر' if app.has_permission_handler else 'غير مثبت'}", 
-                "green" if app.has_permission_handler else "orange")
+    # UI Components
+    quote_text = ft.Text(
+        value="",
+        size=24,
+        color="#fbbf24",
+        weight=ft.FontWeight.W_500,
+        text_align=ft.TextAlign.CENTER,
+        selectable=True,
+        max_lines=10
+    )
+    
+    author_text = ft.Text(
+        value="",
+        size=18,
+        color="#fcd34d",
+        italic=True,
+        text_align=ft.TextAlign.CENTER,
+        selectable=True,
+        weight=ft.FontWeight.W_600
+    )
+    
+    source_chip = ft.Container(
+        content=ft.Text(
+            value="",
+            size=12,
+            color="#94a3b8",
+            text_align=ft.TextAlign.CENTER,
+            weight=ft.FontWeight.W_500
+        ),
+        bgcolor="#1e293b",
+        padding=ft.padding.symmetric(horizontal=15, vertical=8),
+        border_radius=20,
+        visible=False
+    )
+    
+    loading_container = ft.Container(
+        content=ft.Column(
+            [
+                ft.ProgressRing(
+                    color="#fbbf24",
+                    width=40,
+                    height=40,
+                    stroke_width=3
+                ),
+                ft.Text(
+                    "Loading...",
+                    size=14,
+                    color="#94a3b8",
+                    text_align=ft.TextAlign.CENTER
+                )
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=12
+        ),
+        visible=False
+    )
+    
+    error_container = ft.Container(
+        content=ft.Row(
+            [
+                ft.Icon(ft.Icons.INFO_OUTLINE, color="#fbbf24", size=20),
+                ft.Text(
+                    value="",
+                    size=13,
+                    color="#fcd34d",
+                    expand=True,
+                    text_align=ft.TextAlign.CENTER
+                )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8
+        ),
+        bgcolor="#1e293b",
+        border=ft.border.all(1, "#fbbf24"),
+        padding=12,
+        border_radius=10,
+        visible=False
+    )
+    
+    def show_error(message):
+        """Display error message"""
+        error_container.content.controls[1].value = message
+        error_container.visible = True
+        page.update()
+    
+    def hide_error():
+        """Hide error message"""
+        error_container.visible = False
+        page.update()
+    
+    def update_quote_display(quote_data):
+        """Update the UI with new quote data"""
+        loading_container.visible = False
+        
+        if quote_data.get("success"):
+            hide_error()
+            current_quote.update(quote_data)
+            quote_text.value = f'"{quote_data["text"]}"'
+            author_text.value = f"— {quote_data['author']}"
+            source_chip.content.value = quote_data.get('source', '')
+            source_chip.visible = True
+            quote_text.visible = True
+            author_text.visible = True
+        else:
+            quote_text.visible = False
+            author_text.visible = False
+            source_chip.visible = False
+            show_error(quote_data.get("error", "Unable to load quote"))
+        
+        page.update()
+    
+    def fetch_quote(fetch_function, *args):
+        """Generic quote fetching with loading state"""
+        hide_error()
+        quote_text.visible = False
+        author_text.visible = False
+        source_chip.visible = False
+        loading_container.visible = True
+        page.update()
+        
+        quote_data = fetch_function(*args)
+        update_quote_display(quote_data)
+    
+    def on_random_click(e):
+        fetch_quote(get_random_quote)
+    
+    def on_daily_click(e):
+        fetch_quote(get_quote_of_day)
+    
+    def on_copy_click(e):
+        """Copy quote to clipboard"""
+        if not current_quote.get("text"):
+            show_error("⚠️ No quote to copy")
+            return
+        
+        full_text = f'{current_quote["text"]}\n— {current_quote["author"]}'
+        page.set_clipboard(full_text)
+        
+        # Show success feedback
+        snackbar = ft.SnackBar(
+            content=ft.Text("✓ Quote copied to clipboard!", color="#fff"),
+            bgcolor="#16a34a",
+            duration=2000
+        )
+        page.overlay.append(snackbar)
+        snackbar.open = True
+        page.update()
+    
+    def on_share_click(e):
+        """Share quote"""
+        if not current_quote.get("text"):
+            show_error("⚠️ No quote to share")
+            return
+        
+        full_text = f'{current_quote["text"]}\n— {current_quote["author"]}'
+        page.set_clipboard(full_text)
+        
+        snackbar = ft.SnackBar(
+            content=ft.Text("✓ Quote ready to share! (Copied)", color="#fff"),
+            bgcolor="#16a34a",
+            duration=2500
+        )
+        page.overlay.append(snackbar)
+        snackbar.open = True
+        page.update()
+    
+    # Quote display container
+    quote_container = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(
+                    ft.Icons.FORMAT_QUOTE_ROUNDED,
+                    size=50,
+                    color="#fbbf24",
+                    opacity=0.4
+                ),
+                quote_text,
+                author_text,
+                loading_container,
+                source_chip,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=15
+        ),
+        border_radius=20,
+        bgcolor="#1e293b",
+        padding=35,
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.top_left,
+            end=ft.alignment.bottom_right,
+            colors=["#1e293b", "#0f172a"]
+        ),
+        border=ft.border.all(1, "#334155"),
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=25,
+            color=ft.Colors.with_opacity(0.6, ft.Colors.BLACK),
+            offset=ft.Offset(0, 10)
+        ),
+        expand=True
+    )
+    
+    # Action buttons
+    button_random = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.SHUFFLE_ROUNDED, color="#0f172a", size=28),
+                ft.Text("Random", size=13, color="#0f172a", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        bgcolor="#fbbf24",
+        border_radius=14,
+        padding=18,
+        ink=True,
+        on_click=on_random_click,
+        expand=True,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=10,
+            color=ft.Colors.with_opacity(0.4, "#fbbf24"),
+            offset=ft.Offset(0, 4)
+        )
+    )
+    
+    button_daily = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.TODAY_ROUNDED, color="#fbbf24", size=28),
+                ft.Text("Daily", size=13, color="#fbbf24", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        bgcolor="#1e293b",
+        border=ft.border.all(2, "#fbbf24"),
+        border_radius=14,
+        padding=18,
+        ink=True,
+        on_click=on_daily_click,
+        expand=True
+    )
+    
+    button_copy = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.COPY_ROUNDED, color="#fbbf24", size=28),
+                ft.Text("Copy", size=13, color="#fbbf24", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        bgcolor="#1e293b",
+        border=ft.border.all(2, "#fbbf24"),
+        border_radius=14,
+        padding=18,
+        ink=True,
+        on_click=on_copy_click,
+        expand=True
+    )
+    
+    button_share = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.SHARE_ROUNDED, color="#fbbf24", size=28),
+                ft.Text("Share", size=13, color="#fbbf24", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        bgcolor="#1e293b",
+        border=ft.border.all(2, "#fbbf24"),
+        border_radius=14,
+        padding=18,
+        ink=True,
+        on_click=on_share_click,
+        expand=True
+    )
+    
+    buttons_row1 = ft.Row(
+        [button_random, button_daily],
+        spacing=12,
+        alignment=ft.MainAxisAlignment.CENTER
+    )
+    
+    buttons_row2 = ft.Row(
+        [button_copy, button_share],
+        spacing=12,
+        alignment=ft.MainAxisAlignment.CENTER
+    )
+    
+    # Main layout
+    main_column = ft.Column(
+        [
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Quote Explorer",
+                            size=36,
+                            weight=ft.FontWeight.BOLD,
+                            color="#fbbf24",
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text(
+                            "Daily inspiration at your fingertips",
+                            size=14,
+                            color="#94a3b8",
+                            text_align=ft.TextAlign.CENTER,
+                            italic=True
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=6
+                ),
+                padding=ft.padding.only(bottom=20)
+            ),
+            quote_container,
+            ft.Container(content=error_container, padding=ft.padding.only(top=10, bottom=10)),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Quick Actions",
+                            size=16,
+                            weight=ft.FontWeight.BOLD,
+                            color="#fbbf24",
+                        ),
+                        buttons_row1,
+                        buttons_row2,
+                    ],
+                    spacing=12
+                ),
+                padding=ft.padding.only(top=10)
+            ),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        spacing=0,
+        expand=True
+    )
+    
+    page.add(main_column)
+    
+    # Load initial quote
+    fetch_quote(get_random_quote)
+
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main, view=ft.AppView.FLET_APP)

@@ -10,7 +10,7 @@ dependencies = [
 
 [tool.flet]
 org = "wallpaper"
-product = "fWallpaperStudio"
+product = "Quote for you"
 company = "Your Company"
 copyright = "Copyright (C) 2025"
 
@@ -23,7 +23,6 @@ permissions = [
     "android.permission.SET_WALLPAPER",
 ]
 
-include_packages = ["pyjnius"]
 
 dependencies=["flet","flet-permission-handler"]
 

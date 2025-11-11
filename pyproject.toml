@@ -26,7 +26,7 @@ permissions = [
 
 include_packages = ["requests"]
 
-dependencies=["flet","flet-permission-handler","flet_ads"]
+dependencies=["flet","flet-permission-handler"]
 
 min_sdk_version = 26
 target_sdk_version = 35

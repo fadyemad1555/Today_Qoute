@@ -2,6 +2,7 @@ import flet as ft
 import requests
 import time
 import random
+import asyncio
 
 
 # Rate limiting and caching
@@ -141,6 +142,7 @@ def get_quote_of_day():
 
 
 def main(page: ft.Page):
+    page.window.icon="icon.png"
     page.title = "Quote Explorer"
     page.theme_mode = ft.ThemeMode.DARK
     page.window.width = 580
@@ -150,6 +152,101 @@ def main(page: ft.Page):
     
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
+    
+    # Splash Screen
+    splash_icon = ft.Icon(
+        ft.Icons.AUTO_STORIES_ROUNDED,
+        size=120,
+        color="#fbbf24",
+    )
+    
+    splash_progress = ft.ProgressRing(
+        color="#fbbf24",
+        width=60,
+        height=60,
+        stroke_width=4
+    )
+    
+    splash_text = ft.Text(
+        "Quote Explorer",
+        size=48,
+        weight=ft.FontWeight.BOLD,
+        color="#f8fafc",
+        text_align=ft.TextAlign.CENTER,
+    )
+    
+    splash_subtitle = ft.Text(
+        "Loading inspiration...",
+        size=14,
+        color="#64748b",
+        text_align=ft.TextAlign.CENTER,
+        weight=ft.FontWeight.W_500,
+        animate_opacity=ft.Animation(1000, ft.AnimationCurve.EASE_IN_OUT)
+    )
+    
+    # Animated decorative circles for splash
+    splash_deco_1 = ft.Container(
+        width=500,
+        height=500,
+        border_radius=250,
+        bgcolor=ft.Colors.with_opacity(0.05, "#fbbf24"),
+        blur=ft.Blur(60, 60, ft.BlurTileMode.CLAMP),
+    )
+    
+    splash_deco_2 = ft.Container(
+        width=350,
+        height=350,
+        border_radius=175,
+        bgcolor=ft.Colors.with_opacity(0.03, "#60a5fa"),
+        blur=ft.Blur(50, 50, ft.BlurTileMode.CLAMP),
+    )
+    
+    splash_screen = ft.Container(
+        content=ft.Stack(
+            [
+                # Background decorations
+                ft.Container(
+                    content=ft.Stack(
+                        [
+                            ft.Container(
+                                content=splash_deco_1,
+                                left=-150,
+                                top=-200
+                            ),
+                            ft.Container(
+                                content=splash_deco_2,
+                                right=-100,
+                                bottom=-150
+                            ),
+                        ]
+                    ),
+                    expand=True
+                ),
+                # Splash content
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Container(
+                                content=splash_icon,
+                                animate_scale=ft.Animation(800, ft.AnimationCurve.EASE_OUT),
+                            ),
+                            ft.Container(height=30),
+                            splash_text,
+                            ft.Container(height=10),
+                            splash_subtitle,
+                            ft.Container(height=40),
+                            splash_progress,
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    expand=True,
+                )
+            ]
+        ),
+        bgcolor="#0a0e1a",
+        expand=True,
+    )
     
     # Animated decorative elements
     def create_deco_circles():
@@ -725,26 +822,46 @@ def main(page: ft.Page):
         page.update()
     
     # Main layout
-    page.add(
-        ft.Column(
-            [
-                ft.Stack(
-                    [
-                        create_deco_circles(),
-                        page_container
-                    ],
-                    expand=True
-                ),
-                navbar
-            ],
-            spacing=0,
-            expand=True
-        )
+    main_app = ft.Column(
+        [
+            ft.Stack(
+                [
+                    create_deco_circles(),
+                    page_container
+                ],
+                expand=True
+            ),
+            navbar
+        ],
+        spacing=0,
+        expand=True,
+        visible=False,
     )
     
-    # Load initial quote
-    fetch_quote(get_random_quote)
+    # Add splash screen initially
+    page.add(splash_screen)
+    
+    # Animate splash and transition to main app
+    async def hide_splash():
+        await asyncio.sleep(2.5)  # Show splash for 2.5 seconds
+        
+        # Fade out splash
+        splash_subtitle.opacity = 0
+        page.update()
+        await asyncio.sleep(0.3)
+        
+        # Remove splash and show main app
+        page.controls.clear()
+        page.add(main_app)
+        main_app.visible = True
+        page.update()
+        
+        # Load initial quote
+        fetch_quote(get_random_quote)
+    
+    # Run splash animation
+    page.run_task(hide_splash)
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main,assets_dir="/assets")

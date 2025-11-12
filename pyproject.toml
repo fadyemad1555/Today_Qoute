@@ -14,7 +14,13 @@ org = "todayQoute"
 product = "todayQoute"
 company = "Your Company"
 copyright = "Copyright (C) 2025"
+# for Android
+[tool.flet.android.meta_data]
+"com.google.android.gms.ads.APPLICATION_ID" = "ca-app-pub-3940256099942544~3347511713"
 
+# for iOS
+[tool.flet.ios.info]
+GADApplicationIdentifier = "ca-app-pub-3940256099942544~3347511713"
 
 [tool.flet.android]
 permissions = [
@@ -26,7 +32,7 @@ permissions = [
 
 include_packages = ["requests"]
 
-dependencies=["flet","flet-permission-handler"]
+dependencies=["flet","flet-permission-handler","flet-ads==0.1.0"]
 
 min_sdk_version = 26
 target_sdk_version = 35

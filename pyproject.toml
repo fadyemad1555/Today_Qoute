@@ -11,7 +11,7 @@ dependencies = [
 
 [tool.flet]
 org = "todayQoute"
-product = "todayQoute"
+product = "AD test"
 company = "Your Company"
 copyright = "Copyright (C) 2025"
 # for Android

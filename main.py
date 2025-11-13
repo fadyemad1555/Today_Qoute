@@ -13,6 +13,7 @@ daily_quote_cache = None
 daily_quote_date = None
 browse_quotes_cache = []
 browse_cache_time = None
+version="2.0"
 
 OFFLINE_QUOTES = [
     {"q": "The only way to do great work is to love what you do.", "a": "Steve Jobs"},
@@ -852,7 +853,7 @@ def main(page: ft.Page):
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Text(
-                            "Version 2.0",
+                            version,
                             size=13,
                             color="#64748b",
                             text_align=ft.TextAlign.CENTER,

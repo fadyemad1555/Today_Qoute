@@ -3,6 +3,14 @@ import requests
 import time
 import random
 
+# Try to import ads, but gracefully handle if not available
+try:
+    from flet_ads import BannerAd, InterstitialAd, BannerAdSize
+    ADS_AVAILABLE = True
+except ImportError:
+    ADS_AVAILABLE = False
+    print("Ads module not available. Install with: pip install flet-ads")
+
 
 # Rate limiting and caching
 last_request_time = 0
@@ -13,7 +21,6 @@ daily_quote_cache = None
 daily_quote_date = None
 browse_quotes_cache = []
 browse_cache_time = None
-version="2.0"
 
 OFFLINE_QUOTES = [
     {"q": "The only way to do great work is to love what you do.", "a": "Steve Jobs"},
@@ -180,6 +187,28 @@ def main(page: ft.Page):
     
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
+    
+    # Initialize ads if available
+    interstitial_ad = None
+    if ADS_AVAILABLE:
+        try:
+            # Test AdMob unit IDs for Android (use iOS IDs for iOS)
+            interstitial_ad = InterstitialAd(
+                unit_id="ca-app-pub-3940256099942544/1033173712",  # Test ID for Android
+            )
+            
+            def on_ad_loaded(e):
+                print("Interstitial ad loaded successfully!")
+            
+            def on_ad_error(e):
+                print(f"Ad error: {e.data}")
+            
+            interstitial_ad.on_load = on_ad_loaded
+            interstitial_ad.on_error = on_ad_error
+            interstitial_ad.load()
+        except Exception as e:
+            print(f"Failed to initialize ads: {e}")
+            interstitial_ad = None
     
     # Animated decorative elements
     def create_deco_circles():
@@ -832,6 +861,72 @@ def main(page: ft.Page):
     )
     
     # About page content
+    def show_support_ad(e):
+        if interstitial_ad:
+            try:
+                if interstitiagitl_ad.is_loaded():
+                    interstitial_ad.show()
+                    
+                    # Show thank you message
+                    snackbar = ft.SnackBar(
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.FAVORITE, color="#f472b6", size=20),
+                                ft.Text("Thank you for your support! 💝", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                            ],
+                            spacing=8
+                        ),
+                        bgcolor="#1e293b",
+                        duration=3000,
+                        behavior=ft.SnackBarBehavior.FLOATING,
+                    )
+                    page.overlay.append(snackbar)
+                    snackbar.open = True
+                    page.update()
+                    
+                    # Reload ad for next time
+                    interstitial_ad.load()
+                else:
+                    # Ad not loaded yet
+                    snackbar = ft.SnackBar(
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.INFO_OUTLINE, color="#60a5fa", size=20),
+                                ft.Text("Ad is loading... Please try again in a moment", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
+                            ],
+                            spacing=8
+                        ),
+                        bgcolor="#1e293b",
+                        duration=2000,
+                        behavior=ft.SnackBarBehavior.FLOATING,
+                    )
+                    page.overlay.append(snackbar)
+                    snackbar.open = True
+                    page.update()
+                    interstitial_ad.load()
+            except Exception as e:
+                print(f"Error showing ad: {e}")
+                show_support_message()
+        else:
+            show_support_message()
+    
+    def show_support_message():
+        snackbar = ft.SnackBar(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.INFO_OUTLINE, color="#60a5fa", size=20),
+                    ft.Text("Ads only available on mobile apps", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
+                ],
+                spacing=8
+            ),
+            bgcolor="#1e293b",
+            duration=2500,
+            behavior=ft.SnackBarBehavior.FLOATING,
+        )
+        page.overlay.append(snackbar)
+        snackbar.open = True
+        page.update()
+    
     about_content = ft.Column(
         [
             ft.Container(
@@ -853,7 +948,7 @@ def main(page: ft.Page):
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Text(
-                            version,
+                            "Version 2.0",
                             size=13,
                             color="#64748b",
                             text_align=ft.TextAlign.CENTER,
@@ -881,6 +976,62 @@ def main(page: ft.Page):
                             color="#94a3b8",
                             weight=ft.FontWeight.W_400,
                             text_align=ft.TextAlign.LEFT,
+                        ),
+                        ft.Container(height=20),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "Support the Developer",
+                                        size=15,
+                                        weight=ft.FontWeight.BOLD,
+                                        color="#f8fafc",
+                                    ),
+                                    ft.Container(height=8),
+                                    ft.Text(
+                                        "Help keep this app free and ad-free! Watch a quick ad to support development.",
+                                        size=13,
+                                        color="#94a3b8",
+                                        weight=ft.FontWeight.W_400,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
+                                    ft.Container(height=12),
+                                    ft.Container(
+                                        content=ft.Row(
+                                            [
+                                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED, color="#f472b6", size=22),
+                                                ft.Text(
+                                                    "Support Me - Watch Ad",
+                                                    size=14,
+                                                    color="#f8fafc",
+                                                    weight=ft.FontWeight.BOLD
+                                                )
+                                            ],
+                                            alignment=ft.MainAxisAlignment.CENTER,
+                                            spacing=10
+                                        ),
+                                        bgcolor=ft.Colors.with_opacity(0.15, "#f472b6"),
+                                        border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#f472b6")),
+                                        border_radius=14,
+                                        padding=16,
+                                        ink=True,
+                                        on_click=show_support_ad,
+                                        shadow=ft.BoxShadow(
+                                            spread_radius=0,
+                                            blur_radius=12,
+                                            color=ft.Colors.with_opacity(0.3, "#f472b6"),
+                                            offset=ft.Offset(0, 4)
+                                        ),
+                                        animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+                                    ),
+                                ],
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                spacing=0
+                            ),
+                            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+                            border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
+                            border_radius=12,
+                            padding=16,
                         ),
                         ft.Container(height=20),
                         ft.Container(

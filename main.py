@@ -83,98 +83,119 @@ def safe_api_request(url, timeout=8):
 def get_random_quote():
     global quote_cache, cache_index
     
-    if quote_cache and cache_index < len(quote_cache):
-        quote = quote_cache[cache_index]
-        cache_index += 1
+    try:
+        if quote_cache and cache_index < len(quote_cache):
+            quote = quote_cache[cache_index]
+            cache_index += 1
+            return {
+                "text": quote['q'],
+                "author": quote['a'],
+                "source": "Random Quote",
+                "success": True
+            }
+        
+        response = safe_api_request("https://zenquotes.io/api/quotes")
+        
+        if response:
+            try:
+                data = response.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    quote_cache = data
+                    cache_index = 0
+                    quote = random.choice(data)
+                    return {
+                        "text": quote['q'],
+                        "author": quote['a'],
+                        "source": "Random Quote",
+                        "success": True
+                    }
+            except Exception as e:
+                print(f"Failed to parse response: {e}")
+        
+        # Fallback to offline quotes
+        quote = random.choice(OFFLINE_QUOTES)
         return {
             "text": quote['q'],
             "author": quote['a'],
-            "source": "Random Quote",
+            "source": "Offline Quote",
             "success": True
         }
-    
-    response = safe_api_request("https://zenquotes.io/api/quotes")
-    
-    if response:
-        try:
-            data = response.json()
-            if data and isinstance(data, list):
-                quote_cache = data
-                cache_index = 0
-                quote = random.choice(data)
-                return {
-                    "text": quote['q'],
-                    "author": quote['a'],
-                    "source": "Random Quote",
-                    "success": True
-                }
-        except Exception as e:
-            print(f"Failed to parse response: {e}")
-    
-    quote = random.choice(OFFLINE_QUOTES)
-    return {
-        "text": quote['q'],
-        "author": quote['a'],
-        "source": "Offline Quote",
-        "success": True
-    }
+    except Exception as e:
+        print(f"Error in get_random_quote: {e}")
+        quote = random.choice(OFFLINE_QUOTES)
+        return {
+            "text": quote['q'],
+            "author": quote['a'],
+            "source": "Offline Quote",
+            "success": True
+        }
 
 
 def get_quote_of_day():
     global daily_quote_cache, daily_quote_date
     
-    import datetime
-    today = datetime.date.today().isoformat()
-    
-    if daily_quote_cache and daily_quote_date == today:
-        return daily_quote_cache
-    
-    response = safe_api_request("https://zenquotes.io/api/today")
-    
-    if response:
-        try:
-            data = response.json()
-            if data and isinstance(data, list):
-                result = {
-                    "text": data[0]['q'],
-                    "author": data[0]['a'],
-                    "source": "Quote of the Day",
-                    "success": True
-                }
-                daily_quote_cache = result
-                daily_quote_date = today
-                return result
-        except Exception as e:
-            print(f"Failed to parse daily quote: {e}")
-    
-    return get_random_quote()
+    try:
+        import datetime
+        today = datetime.date.today().isoformat()
+        
+        if daily_quote_cache and daily_quote_date == today:
+            return daily_quote_cache
+        
+        response = safe_api_request("https://zenquotes.io/api/today")
+        
+        if response:
+            try:
+                data = response.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    result = {
+                        "text": data[0]['q'],
+                        "author": data[0]['a'],
+                        "source": "Quote of the Day",
+                        "success": True
+                    }
+                    daily_quote_cache = result
+                    daily_quote_date = today
+                    return result
+            except Exception as e:
+                print(f"Failed to parse daily quote: {e}")
+        
+        return get_random_quote()
+    except Exception as e:
+        print(f"Error in get_quote_of_day: {e}")
+        return get_random_quote()
 
 
 def get_browse_quotes():
     global browse_quotes_cache, browse_cache_time
     
-    # Cache browse quotes for 1 hour
-    current_time = time.time()
-    if browse_quotes_cache and browse_cache_time and (current_time - browse_cache_time < 3600):
-        return {"quotes": browse_quotes_cache, "success": True, "source": "cache"}
-    
-    response = safe_api_request("https://zenquotes.io/api/quotes")
-    
-    if response:
-        try:
-            data = response.json()
-            if data and isinstance(data, list):
-                browse_quotes_cache = data
-                browse_cache_time = current_time
-                return {"quotes": data, "success": True, "source": "api"}
-        except Exception as e:
-            print(f"Failed to parse browse quotes: {e}")
-    
-    # Return offline quotes if API fails
-    if not browse_quotes_cache:
-        browse_quotes_cache = OFFLINE_QUOTES
-    
-    return {"quotes": browse_quotes_cache, "success": True, "source": "offline"}
+    try:
+        # Cache browse quotes for 1 hour
+        current_time = time.time()
+        if browse_quotes_cache and browse_cache_time and (current_time - browse_cache_time < 3600):
+            return {"quotes": browse_quotes_cache, "success": True, "source": "cache"}
+        
+        response = safe_api_request("https://zenquotes.io/api/quotes")
+        
+        if response:
+            try:
+                data = response.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    browse_quotes_cache = data
+                    browse_cache_time = current_time
+                    return {"quotes": data, "success": True, "source": "api"}
+            except Exception as e:
+                print(f"Failed to parse browse quotes: {e}")
+        
+        # Return offline quotes if API fails
+        if not browse_quotes_cache:
+            browse_quotes_cache = OFFLINE_QUOTES
+        
+        return {"quotes": browse_quotes_cache, "success": True, "source": "offline"}
+    except Exception as e:
+        print(f"Error in get_browse_quotes: {e}")
+        if not browse_quotes_cache:
+            browse_quotes_cache = OFFLINE_QUOTES
+        return {"quotes": browse_quotes_cache, "success": True, "source": "offline"}
 
 
 def main(page: ft.Page):
@@ -188,8 +209,9 @@ def main(page: ft.Page):
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
     
-    # Initialize ads if available
+    # Initialize ads only on mobile platforms
     interstitial_ad = None
+    is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
     
     # Test ad unit IDs
     ad_ids = {
@@ -204,26 +226,29 @@ def main(page: ft.Page):
     def handle_interstitial_ad_close(e):
         nonlocal interstitial_ad
         print("Closing InterstitialAd")
-        page.overlay.remove(e.control)
-        page.overlay.append(interstitial_ad := get_new_interstitial_ad())
-        page.update()
-        
-        # Show thank you message
-        snackbar = ft.SnackBar(
-            content=ft.Row(
-                [
-                    ft.Icon(ft.Icons.FAVORITE, color="#f472b6", size=20),
-                    ft.Text("Thank you for your support! 💝", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
-                ],
-                spacing=8
-            ),
-            bgcolor="#1e293b",
-            duration=3000,
-            behavior=ft.SnackBarBehavior.FLOATING,
-        )
-        page.overlay.append(snackbar)
-        snackbar.open = True
-        page.update()
+        try:
+            page.overlay.remove(e.control)
+            page.overlay.append(interstitial_ad := get_new_interstitial_ad())
+            page.update()
+            
+            # Show thank you message
+            snackbar = ft.SnackBar(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.FAVORITE, color="#f472b6", size=20),
+                        ft.Text("Thank you for your support! 💝", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                    ],
+                    spacing=8
+                ),
+                bgcolor="#1e293b",
+                duration=3000,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            page.overlay.append(snackbar)
+            snackbar.open = True
+            page.update()
+        except Exception as ex:
+            print(f"Error in handle_interstitial_ad_close: {ex}")
     
     def handle_interstitial_ad_error(e):
         error_message = str(e.data) if e.data else "Unknown error"
@@ -294,7 +319,7 @@ def main(page: ft.Page):
         page.update()
     
     def get_new_interstitial_ad():
-        if not ADS_AVAILABLE:
+        if not ADS_AVAILABLE or not is_mobile:
             return None
         
         try:
@@ -311,7 +336,7 @@ def main(page: ft.Page):
             print(f"Failed to create interstitial ad: {e}")
             return None
     
-    if ADS_AVAILABLE:
+    if ADS_AVAILABLE and is_mobile:
         interstitial_ad = get_new_interstitial_ad()
         if interstitial_ad:
             page.overlay.append(interstitial_ad)
@@ -513,35 +538,50 @@ def main(page: ft.Page):
         page.update()
     
     def update_quote_display(quote_data):
-        loading_container.visible = False
-        
-        if quote_data.get("success"):
-            hide_error()
-            current_quote.update(quote_data)
-            quote_text.value = f'"{quote_data["text"]}"'
-            author_text.value = f"— {quote_data['author']}"
-            source_badge.content.controls[1].value = quote_data.get('source', '')
-            source_badge.visible = True
-            quote_text.visible = True
-            author_text.visible = True
-        else:
+        try:
+            loading_container.visible = False
+            
+            if quote_data.get("success"):
+                hide_error()
+                current_quote.update(quote_data)
+                quote_text.value = f'"{quote_data["text"]}"'
+                author_text.value = f"— {quote_data['author']}"
+                source_badge.content.controls[1].value = quote_data.get('source', '')
+                source_badge.visible = True
+                quote_text.visible = True
+                author_text.visible = True
+            else:
+                quote_text.visible = False
+                author_text.visible = False
+                source_badge.visible = False
+                show_error(quote_data.get("error", "Unable to load quote"))
+            
+            page.update()
+        except Exception as e:
+            print(f"Error updating quote display: {e}")
+            loading_container.visible = False
             quote_text.visible = False
             author_text.visible = False
             source_badge.visible = False
-            show_error(quote_data.get("error", "Unable to load quote"))
-        
-        page.update()
+            show_error("Error displaying quote. Please try again.")
+            page.update()
     
     def fetch_quote(fetch_function, *args):
-        hide_error()
-        quote_text.visible = False
-        author_text.visible = False
-        source_badge.visible = False
-        loading_container.visible = True
-        page.update()
-        
-        quote_data = fetch_function(*args)
-        update_quote_display(quote_data)
+        try:
+            hide_error()
+            quote_text.visible = False
+            author_text.visible = False
+            source_badge.visible = False
+            loading_container.visible = True
+            page.update()
+            
+            quote_data = fetch_function(*args)
+            update_quote_display(quote_data)
+        except Exception as e:
+            print(f"Error fetching quote: {e}")
+            loading_container.visible = False
+            show_error("Failed to fetch quote. Please try again.")
+            page.update()
     
     def on_random_click(e):
         fetch_quote(get_random_quote)
@@ -550,28 +590,32 @@ def main(page: ft.Page):
         fetch_quote(get_quote_of_day)
     
     def on_copy_click(e):
-        if not current_quote.get("text"):
-            show_error("⚠️ No quote to copy")
-            return
-        
-        full_text = f'{current_quote["text"]}\n— {current_quote["author"]}'
-        page.set_clipboard(full_text)
-        
-        snackbar = ft.SnackBar(
-            content=ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=20),
-                    ft.Text("Quote copied!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
-                ],
-                spacing=8
-            ),
-            bgcolor="#1e293b",
-            duration=2000,
-            behavior=ft.SnackBarBehavior.FLOATING,
-        )
-        page.overlay.append(snackbar)
-        snackbar.open = True
-        page.update()
+        try:
+            if not current_quote.get("text"):
+                show_error("⚠️ No quote to copy")
+                return
+            
+            full_text = f'{current_quote["text"]}\n— {current_quote["author"]}'
+            page.set_clipboard(full_text)
+            
+            snackbar = ft.SnackBar(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=20),
+                        ft.Text("Quote copied!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                    ],
+                    spacing=8
+                ),
+                bgcolor="#1e293b",
+                duration=2000,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            page.overlay.append(snackbar)
+            snackbar.open = True
+            page.update()
+        except Exception as ex:
+            print(f"Error copying quote: {ex}")
+            show_error("Failed to copy quote")
     
     # Quote display container
     quote_content = ft.Column(
@@ -754,24 +798,27 @@ def main(page: ft.Page):
     
     def create_quote_card(quote_data, index):
         def copy_quote(e):
-            full_text = f'{quote_data["q"]}\n— {quote_data["a"]}'
-            page.set_clipboard(full_text)
-            
-            snackbar = ft.SnackBar(
-                content=ft.Row(
-                    [
-                        ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=18),
-                        ft.Text("Copied!", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
-                    ],
-                    spacing=8
-                ),
-                bgcolor="#1e293b",
-                duration=1500,
-                behavior=ft.SnackBarBehavior.FLOATING,
-            )
-            page.overlay.append(snackbar)
-            snackbar.open = True
-            page.update()
+            try:
+                full_text = f'{quote_data["q"]}\n— {quote_data["a"]}'
+                page.set_clipboard(full_text)
+                
+                snackbar = ft.SnackBar(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=18),
+                            ft.Text("Copied!", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
+                        ],
+                        spacing=8
+                    ),
+                    bgcolor="#1e293b",
+                    duration=1500,
+                    behavior=ft.SnackBarBehavior.FLOATING,
+                )
+                page.overlay.append(snackbar)
+                snackbar.open = True
+                page.update()
+            except Exception as ex:
+                print(f"Error copying quote from card: {ex}")
         
         # Alternate colors for variety
         colors = [
@@ -838,90 +885,127 @@ def main(page: ft.Page):
         )
     
     def load_browse_quotes(append=False):
-        if not append:
+        try:
+            if not append:
+                browse_quotes_list.controls.clear()
+                browse_loading.visible = True
+            else:
+                # Remove the "Load More" button and attribution if they exist
+                if len(browse_quotes_list.controls) > 0:
+                    # Remove last 2 items (attribution and load more button)
+                    browse_quotes_list.controls = browse_quotes_list.controls[:-2] if len(browse_quotes_list.controls) >= 2 else []
+            
+            page.update()
+            
+            result = get_browse_quotes()
+            
+            browse_loading.visible = False
+            
+            if result.get("success"):
+                quotes = result.get("quotes", [])
+                start_index = len([c for c in browse_quotes_list.controls if isinstance(c, ft.Container)])
+                
+                for i, quote in enumerate(quotes):
+                    browse_quotes_list.controls.append(create_quote_card(quote, start_index + i))
+                
+                # Add "Load More" button
+                def on_load_more(e):
+                    try:
+                        load_browse_quotes(append=True)
+                    except Exception as ex:
+                        print(f"Error loading more quotes: {ex}")
+                
+                load_more_button = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.REFRESH_ROUNDED, color="#fbbf24", size=20),
+                            ft.Text(
+                                "Load More Quotes",
+                                size=14,
+                                color="#fbbf24",
+                                weight=ft.FontWeight.BOLD
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=8
+                    ),
+                    bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+                    border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
+                    border_radius=14,
+                    padding=16,
+                    ink=True,
+                    on_click=on_load_more,
+                    shadow=ft.BoxShadow(
+                        spread_radius=0,
+                        blur_radius=8,
+                        color=ft.Colors.with_opacity(0.2, "#fbbf24"),
+                        offset=ft.Offset(0, 4)
+                    ),
+                    animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+                )
+                
+                browse_quotes_list.controls.append(load_more_button)
+                
+                # Add attribution at the bottom
+                browse_quotes_list.controls.append(
+                    ft.Container(
+                        content=ft.Text(
+                            "Quotes provided by ZenQuotes.io",
+                            size=11,
+                            color="#64748b",
+                            text_align=ft.TextAlign.CENTER,
+                            weight=ft.FontWeight.W_400
+                        ),
+                        padding=ft.padding.only(top=10, bottom=20)
+                    )
+                )
+            else:
+                browse_quotes_list.controls.append(
+                    ft.Container(
+                        content=ft.Text(
+                            "Failed to load quotes. Please try again.",
+                            size=13,
+                            color="#fb923c",
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        padding=20
+                    )
+                )
+            
+            page.update()
+        except Exception as e:
+            print(f"Error in load_browse_quotes: {e}")
+            browse_loading.visible = False
             browse_quotes_list.controls.clear()
-            browse_loading.visible = True
-        else:
-            # Remove the "Load More" button and attribution if they exist
-            if len(browse_quotes_list.controls) > 0:
-                # Remove last 2 items (attribution and load more button)
-                browse_quotes_list.controls = browse_quotes_list.controls[:-2] if len(browse_quotes_list.controls) >= 2 else []
-        
-        page.update()
-        
-        result = get_browse_quotes()
-        
-        browse_loading.visible = False
-        
-        if result.get("success"):
-            quotes = result.get("quotes", [])
-            start_index = len([c for c in browse_quotes_list.controls if isinstance(c, ft.Container)])
-            
-            for i, quote in enumerate(quotes):
-                browse_quotes_list.controls.append(create_quote_card(quote, start_index + i))
-            
-            # Add "Load More" button
-            def on_load_more(e):
-                load_browse_quotes(append=True)
-            
-            load_more_button = ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Icon(ft.Icons.REFRESH_ROUNDED, color="#fbbf24", size=20),
-                        ft.Text(
-                            "Load More Quotes",
-                            size=14,
-                            color="#fbbf24",
-                            weight=ft.FontWeight.BOLD
-                        )
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=8
-                ),
-                bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
-                border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
-                border_radius=14,
-                padding=16,
-                ink=True,
-                on_click=on_load_more,
-                shadow=ft.BoxShadow(
-                    spread_radius=0,
-                    blur_radius=8,
-                    color=ft.Colors.with_opacity(0.2, "#fbbf24"),
-                    offset=ft.Offset(0, 4)
-                ),
-                animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-            )
-            
-            browse_quotes_list.controls.append(load_more_button)
-            
-            # Add attribution at the bottom
             browse_quotes_list.controls.append(
                 ft.Container(
-                    content=ft.Text(
-                        "Quotes provided by ZenQuotes.io",
-                        size=11,
-                        color="#64748b",
-                        text_align=ft.TextAlign.CENTER,
-                        weight=ft.FontWeight.W_400
+                    content=ft.Column(
+                        [
+                            ft.Icon(ft.Icons.ERROR_OUTLINE, color="#fb923c", size=40),
+                            ft.Container(height=12),
+                            ft.Text(
+                                "Something went wrong",
+                                size=15,
+                                color="#f8fafc",
+                                weight=ft.FontWeight.BOLD,
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Container(height=8),
+                            ft.Text(
+                                "Please try again later",
+                                size=13,
+                                color="#94a3b8",
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=0
                     ),
-                    padding=ft.padding.only(top=10, bottom=20)
+                    padding=40,
+                    alignment=ft.alignment.center,
                 )
             )
-        else:
-            browse_quotes_list.controls.append(
-                ft.Container(
-                    content=ft.Text(
-                        "Failed to load quotes. Please try again.",
-                        size=13,
-                        color="#fb923c",
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    padding=20
-                )
-            )
-        
-        page.update()
+            page.update()
     
     browse_header = ft.Container(
         content=ft.Column(
@@ -967,97 +1051,168 @@ def main(page: ft.Page):
     )
     
     # About page content
-    async def show_support_ad(e):
-        if interstitial_ad:
-            try:
-                print("Showing InterstitialAd")
-                await interstitial_ad.show()
-            except Exception as ex:
-                error_msg = str(ex)
-                print(f"Error showing ad: {error_msg}")
-                
-                # Show error dialog for show() errors
-                def close_dialog(e):
-                    show_error_dialog.open = False
-                    page.update()
-                
-                show_error_dialog = ft.AlertDialog(
-                    modal=True,
-                    title=ft.Row(
-                        [
-                            ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color="#fb923c", size=28),
-                            ft.Text("Cannot Show Ad", color="#f8fafc", weight=ft.FontWeight.BOLD),
-                        ],
-                        spacing=10
-                    ),
-                    content=ft.Container(
-                        content=ft.Column(
+    def show_support_ad(e):
+        print(f"=== show_support_ad called ===")
+        print(f"is_mobile: {is_mobile}")
+        print(f"page.platform: {page.platform}")
+        
+        try:
+            if not is_mobile:
+                print("Not mobile - showing message dialog")
+                # Show info dialog for non-mobile platforms
+                show_support_message("Ads only available on mobile apps")
+                return
+            
+            print("Is mobile - attempting to show ad")
+            if interstitial_ad:
+                try:
+                    print("Showing InterstitialAd")
+                    interstitial_ad.show()
+                except Exception as ex:
+                    error_msg = str(ex)
+                    print(f"Error showing ad: {error_msg}")
+                    
+                    # Show error dialog for show() errors
+                    def close_dialog(e):
+                        show_error_dialog.open = False
+                        page.update()
+                    
+                    show_error_dialog = ft.AlertDialog(
+                        modal=True,
+                        title=ft.Row(
                             [
-                                ft.Text(
-                                    "The advertisement could not be displayed",
-                                    size=15,
-                                    color="#f8fafc",
-                                    weight=ft.FontWeight.W_500
-                                ),
-                                ft.Container(height=8),
-                                ft.Text(
-                                    f"Reason: {error_msg}",
-                                    size=12,
-                                    color="#94a3b8",
-                                    weight=ft.FontWeight.W_400
-                                ),
-                                ft.Container(height=8),
-                                ft.Text(
-                                    "This might happen if the ad hasn't loaded yet or if ads are not available on this platform.",
-                                    size=12,
-                                    color="#64748b",
-                                    weight=ft.FontWeight.W_400,
-                                    italic=True
-                                ),
+                                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color="#fb923c", size=28),
+                                ft.Text("Cannot Show Ad", color="#f8fafc", weight=ft.FontWeight.BOLD),
                             ],
-                            tight=True,
-                            spacing=0
+                            spacing=10
                         ),
-                        padding=ft.padding.only(top=10, bottom=10)
-                    ),
-                    actions=[
-                        ft.TextButton(
-                            "Got it",
-                            on_click=close_dialog,
-                            style=ft.ButtonStyle(
-                                color=ft.Colors.WHITE,
-                                bgcolor=ft.Colors.with_opacity(0.8, "#fbbf24"),
-                                overlay_color=ft.Colors.with_opacity(0.1, "#fbbf24"),
-                            )
+                        content=ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text(
+                                        "The advertisement could not be displayed",
+                                        size=15,
+                                        color="#f8fafc",
+                                        weight=ft.FontWeight.W_500
+                                    ),
+                                    ft.Container(height=8),
+                                    ft.Text(
+                                        f"Reason: {error_msg}",
+                                        size=12,
+                                        color="#94a3b8",
+                                        weight=ft.FontWeight.W_400
+                                    ),
+                                    ft.Container(height=8),
+                                    ft.Text(
+                                        "This might happen if the ad hasn't loaded yet or if ads are not available on this platform.",
+                                        size=12,
+                                        color="#64748b",
+                                        weight=ft.FontWeight.W_400,
+                                        italic=True
+                                    ),
+                                ],
+                                tight=True,
+                                spacing=0
+                            ),
+                            padding=ft.padding.only(top=10, bottom=10)
                         ),
-                    ],
-                    actions_alignment=ft.MainAxisAlignment.END,
-                    bgcolor="#1e293b",
-                    shape=ft.RoundedRectangleBorder(radius=16),
-                )
-                
-                page.dialog = show_error_dialog
-                show_error_dialog.open = True
-                page.update()
-        else:
-            show_support_message("Ads only available on mobile apps")
+                        actions=[
+                            ft.TextButton(
+                                "Got it",
+                                on_click=close_dialog,
+                                style=ft.ButtonStyle(
+                                    color=ft.Colors.WHITE,
+                                    bgcolor=ft.Colors.with_opacity(0.8, "#fbbf24"),
+                                    overlay_color=ft.Colors.with_opacity(0.1, "#fbbf24"),
+                                )
+                            ),
+                        ],
+                        actions_alignment=ft.MainAxisAlignment.END,
+                        bgcolor="#1e293b",
+                        shape=ft.RoundedRectangleBorder(radius=16),
+                    )
+                    
+                    page.dialog = show_error_dialog
+                    show_error_dialog.open = True
+                    page.update()
+            else:
+                print("No interstitial_ad available")
+                show_support_message("Ads are not available on this device")
+        except Exception as ex:
+            print(f"Error in show_support_ad: {ex}")
+            import traceback
+            traceback.print_exc()
+            show_support_message("An error occurred. Please try again.")
     
     def show_support_message(message="Ads only available on mobile apps"):
-        snackbar = ft.SnackBar(
-            content=ft.Row(
-                [
-                    ft.Icon(ft.Icons.INFO_OUTLINE, color="#60a5fa", size=20),
-                    ft.Text(message, color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
-                ],
-                spacing=8
-            ),
-            bgcolor="#1e293b",
-            duration=2500,
-            behavior=ft.SnackBarBehavior.FLOATING,
-        )
-        page.overlay.append(snackbar)
-        snackbar.open = True
-        page.update()
+        print(f"=== show_support_message called with: {message} ===")
+        
+        try:
+            # Use SnackBar instead of AlertDialog for better reliability
+            snackbar = ft.SnackBar(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.INFO_OUTLINE_ROUNDED, color="#60a5fa", size=24),
+                                ft.Text(
+                                    "Mobile Feature Only",
+                                    size=15,
+                                    color="#fbbf24",
+                                    weight=ft.FontWeight.BOLD
+                                ),
+                            ],
+                            spacing=10
+                        ),
+                        ft.Container(height=8),
+                        ft.Text(
+                            message,
+                            size=13,
+                            color="#f8fafc",
+                            weight=ft.FontWeight.W_400
+                        ),
+                        ft.Container(height=4),
+                        ft.Text(
+                            "Ads only work on Android/iOS apps",
+                            size=12,
+                            color="#94a3b8",
+                            weight=ft.FontWeight.W_400
+                        ),
+                        ft.Container(height=8),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Text("💡 Build for mobile:", size=11, color="#fbbf24", weight=ft.FontWeight.BOLD),
+                                    ft.Text("• flet build apk (Android)", size=10, color="#cbd5e1"),
+                                    ft.Text("• flet build ipa (iOS)", size=10, color="#cbd5e1"),
+                                ],
+                                spacing=2
+                            ),
+                            bgcolor=ft.Colors.with_opacity(0.1, "#fbbf24"),
+                            border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fbbf24")),
+                            border_radius=8,
+                            padding=10,
+                        )
+                    ],
+                    tight=True,
+                    spacing=0
+                ),
+                bgcolor="#1e293b",
+                duration=5000,
+                behavior=ft.SnackBarBehavior.FLOATING,
+                action="Got it",
+                action_color="#60a5fa",
+            )
+            
+            print("Adding snackbar to overlay")
+            page.overlay.append(snackbar)
+            snackbar.open = True
+            page.update()
+            print("SnackBar should be visible now")
+        except Exception as ex:
+            print(f"Error in show_support_message: {ex}")
+            import traceback
+            traceback.print_exc()
     
     about_content = ft.Column(
         [
@@ -1244,38 +1399,73 @@ def main(page: ft.Page):
     )
     
     def switch_page(page_name):
-        if page_name == "home":
-            page_container.content = home_content
-            update_nav_active("home")
-        elif page_name == "browse":
-            page_container.content = browse_content
-            update_nav_active("browse")
-            load_browse_quotes()
-        elif page_name == "about":
-            page_container.content = about_content
-            update_nav_active("about")
-        page.update()
+        try:
+            if page_name == "home":
+                page_container.content = home_content
+                update_nav_active("home")
+            elif page_name == "browse":
+                page_container.content = browse_content
+                update_nav_active("browse")
+                load_browse_quotes()
+            elif page_name == "about":
+                page_container.content = about_content
+                update_nav_active("about")
+            page.update()
+        except Exception as e:
+            print(f"Error switching page: {e}")
+            page.update()
     
     # Main layout
-    page.add(
-        ft.Column(
-            [
-                ft.Stack(
-                    [
-                        create_deco_circles(),
-                        page_container
-                    ],
-                    expand=True
-                ),
-                navbar
-            ],
-            spacing=0,
-            expand=True
+    try:
+        page.add(
+            ft.Column(
+                [
+                    ft.Stack(
+                        [
+                            create_deco_circles(),
+                            page_container
+                        ],
+                        expand=True
+                    ),
+                    navbar
+                ],
+                spacing=0,
+                expand=True
+            )
         )
-    )
-    
-    # Load initial quote
-    fetch_quote(get_random_quote)
+        
+        # Load initial quote
+        fetch_quote(get_random_quote)
+    except Exception as e:
+        print(f"Error initializing app: {e}")
+        # Show error screen
+        error_screen = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, color="#fb923c", size=64),
+                    ft.Container(height=20),
+                    ft.Text(
+                        "Oops! Something went wrong",
+                        size=20,
+                        color="#f8fafc",
+                        weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(height=12),
+                    ft.Text(
+                        "Please restart the application",
+                        size=14,
+                        color="#94a3b8",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+            ),
+            expand=True,
+            alignment=ft.alignment.center,
+        )
+        page.add(error_screen)
 
 
 if __name__ == "__main__":

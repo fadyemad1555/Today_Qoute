@@ -2,8 +2,6 @@
 name = "flet-ads-example"
 version = "1.0.0"
 description = "flet-ads-example"
-readme = "README.md"
-license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
     "flet-ads",

@@ -209,137 +209,43 @@ def main(page: ft.Page):
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
     
-    # Initialize ads only on mobile platforms
-    interstitial_ad = None
+    # Check if mobile platform
     is_mobile = page.platform in [ft.PagePlatform.ANDROID, ft.PagePlatform.IOS]
     
     # Test ad unit IDs
     ad_ids = {
         ft.PagePlatform.ANDROID: {
-            "interstitial": "ca-app-pub-3940256099942544/1033173712",
+            "banner": "ca-app-pub-3940256099942544/6300978111",
         },
         ft.PagePlatform.IOS: {
-            "interstitial": "ca-app-pub-3940256099942544/4411468910",
+            "banner": "ca-app-pub-3940256099942544/2934735716",
         },
     }
     
-    def handle_interstitial_ad_close(e):
-        nonlocal interstitial_ad
-        print("Closing InterstitialAd")
-        try:
-            page.overlay.remove(e.control)
-            page.overlay.append(interstitial_ad := get_new_interstitial_ad())
-            page.update()
-            
-            # Show thank you message
-            snackbar = ft.SnackBar(
-                content=ft.Row(
-                    [
-                        ft.Icon(ft.Icons.FAVORITE, color="#f472b6", size=20),
-                        ft.Text("Thank you for your support! 💝", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
-                    ],
-                    spacing=8
-                ),
-                bgcolor="#1e293b",
-                duration=3000,
-                behavior=ft.SnackBarBehavior.FLOATING,
-            )
-            page.overlay.append(snackbar)
-            snackbar.open = True
-            page.update()
-        except Exception as ex:
-            print(f"Error in handle_interstitial_ad_close: {ex}")
-    
-    def handle_interstitial_ad_error(e):
-        error_message = str(e.data) if e.data else "Unknown error"
-        print(f"InterstitialAd error: {error_message}")
-        
-        # Show error dialog
-        def close_dialog(e):
-            error_dialog.open = False
-            page.update()
-        
-        error_dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Row(
-                [
-                    ft.Icon(ft.Icons.ERROR_OUTLINE, color="#fb923c", size=28),
-                    ft.Text("Ad Error", color="#f8fafc", weight=ft.FontWeight.BOLD),
-                ],
-                spacing=10
-            ),
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text(
-                            "Unable to load advertisement",
-                            size=15,
-                            color="#f8fafc",
-                            weight=ft.FontWeight.W_500
-                        ),
-                        ft.Container(height=8),
-                        ft.Text(
-                            f"Error: {error_message}",
-                            size=12,
-                            color="#94a3b8",
-                            weight=ft.FontWeight.W_400
-                        ),
-                        ft.Container(height=8),
-                        ft.Text(
-                            "Please try again later or check your internet connection.",
-                            size=12,
-                            color="#64748b",
-                            weight=ft.FontWeight.W_400,
-                            italic=True
-                        ),
-                    ],
-                    tight=True,
-                    spacing=0
-                ),
-                padding=ft.padding.only(top=10, bottom=10)
-            ),
-            actions=[
-                ft.TextButton(
-                    "OK",
-                    on_click=close_dialog,
-                    style=ft.ButtonStyle(
-                        color=ft.Colors.WHITE,
-                        bgcolor=ft.Colors.with_opacity(0.8, "#fbbf24"),
-                        overlay_color=ft.Colors.with_opacity(0.1, "#fbbf24"),
-                    )
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor="#1e293b",
-            shape=ft.RoundedRectangleBorder(radius=16),
-        )
-        
-        page.dialog = error_dialog
-        error_dialog.open = True
-        page.update()
-    
-    def get_new_interstitial_ad():
-        if not ADS_AVAILABLE or not is_mobile:
-            return None
-        
-        try:
-            return fta.InterstitialAd(
-                unit_id=ad_ids.get(page.platform, {}).get("interstitial"),
-                on_load=lambda e: print("InterstitialAd loaded"),
-                on_error=handle_interstitial_ad_error,
-                on_open=lambda e: print("InterstitialAd opened"),
-                on_close=handle_interstitial_ad_close,
-                on_impression=lambda e: print("InterstitialAd impression"),
-                on_click=lambda e: print("InterstitialAd clicked"),
-            )
-        except Exception as e:
-            print(f"Failed to create interstitial ad: {e}")
-            return None
-    
+    # Create banner ad for mobile
+    banner_ad = None
     if ADS_AVAILABLE and is_mobile:
-        interstitial_ad = get_new_interstitial_ad()
-        if interstitial_ad:
-            page.overlay.append(interstitial_ad)
+        try:
+            banner_ad = ft.Container(
+                width=320,
+                height=50,
+                bgcolor=ft.Colors.TRANSPARENT,
+                content=fta.BannerAd(
+                    unit_id=ad_ids.get(page.platform, {}).get("banner"),
+                    on_click=lambda e: print("BannerAd clicked"),
+                    on_load=lambda e: print("BannerAd loaded"),
+                    on_error=lambda e: print("BannerAd error", e.data),
+                    on_open=lambda e: print("BannerAd opened"),
+                    on_close=lambda e: print("BannerAd closed"),
+                    on_impression=lambda e: print("BannerAd impression"),
+                    on_will_dismiss=lambda e: print("BannerAd will dismiss"),
+                ),
+                alignment=ft.alignment.center,
+            )
+            print("Banner ad created successfully")
+        except Exception as e:
+            print(f"Failed to create banner ad: {e}")
+            banner_ad = None
     
     # Animated decorative elements
     def create_deco_circles():
@@ -1051,169 +957,6 @@ def main(page: ft.Page):
     )
     
     # About page content
-    def show_support_ad(e):
-        print(f"=== show_support_ad called ===")
-        print(f"is_mobile: {is_mobile}")
-        print(f"page.platform: {page.platform}")
-        
-        try:
-            if not is_mobile:
-                print("Not mobile - showing message dialog")
-                # Show info dialog for non-mobile platforms
-                show_support_message("Ads only available on mobile apps")
-                return
-            
-            print("Is mobile - attempting to show ad")
-            if interstitial_ad:
-                try:
-                    print("Showing InterstitialAd")
-                    interstitial_ad.show()
-                except Exception as ex:
-                    error_msg = str(ex)
-                    print(f"Error showing ad: {error_msg}")
-                    
-                    # Show error dialog for show() errors
-                    def close_dialog(e):
-                        show_error_dialog.open = False
-                        page.update()
-                    
-                    show_error_dialog = ft.AlertDialog(
-                        modal=True,
-                        title=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color="#fb923c", size=28),
-                                ft.Text("Cannot Show Ad", color="#f8fafc", weight=ft.FontWeight.BOLD),
-                            ],
-                            spacing=10
-                        ),
-                        content=ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "The advertisement could not be displayed",
-                                        size=15,
-                                        color="#f8fafc",
-                                        weight=ft.FontWeight.W_500
-                                    ),
-                                    ft.Container(height=8),
-                                    ft.Text(
-                                        f"Reason: {error_msg}",
-                                        size=12,
-                                        color="#94a3b8",
-                                        weight=ft.FontWeight.W_400
-                                    ),
-                                    ft.Container(height=8),
-                                    ft.Text(
-                                        "This might happen if the ad hasn't loaded yet or if ads are not available on this platform.",
-                                        size=12,
-                                        color="#64748b",
-                                        weight=ft.FontWeight.W_400,
-                                        italic=True
-                                    ),
-                                ],
-                                tight=True,
-                                spacing=0
-                            ),
-                            padding=ft.padding.only(top=10, bottom=10)
-                        ),
-                        actions=[
-                            ft.TextButton(
-                                "Got it",
-                                on_click=close_dialog,
-                                style=ft.ButtonStyle(
-                                    color=ft.Colors.WHITE,
-                                    bgcolor=ft.Colors.with_opacity(0.8, "#fbbf24"),
-                                    overlay_color=ft.Colors.with_opacity(0.1, "#fbbf24"),
-                                )
-                            ),
-                        ],
-                        actions_alignment=ft.MainAxisAlignment.END,
-                        bgcolor="#1e293b",
-                        shape=ft.RoundedRectangleBorder(radius=16),
-                    )
-                    
-                    page.dialog = show_error_dialog
-                    show_error_dialog.open = True
-                    page.update()
-            else:
-                print("No interstitial_ad available")
-                show_support_message("Ads are not available on this device")
-        except Exception as ex:
-            print(f"Error in show_support_ad: {ex}")
-            import traceback
-            traceback.print_exc()
-            show_support_message("An error occurred. Please try again.")
-    
-    def show_support_message(message="Ads only available on mobile apps"):
-        print(f"=== show_support_message called with: {message} ===")
-        
-        try:
-            # Use SnackBar instead of AlertDialog for better reliability
-            snackbar = ft.SnackBar(
-                content=ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Icon(ft.Icons.INFO_OUTLINE_ROUNDED, color="#60a5fa", size=24),
-                                ft.Text(
-                                    "Mobile Feature Only",
-                                    size=15,
-                                    color="#fbbf24",
-                                    weight=ft.FontWeight.BOLD
-                                ),
-                            ],
-                            spacing=10
-                        ),
-                        ft.Container(height=8),
-                        ft.Text(
-                            message,
-                            size=13,
-                            color="#f8fafc",
-                            weight=ft.FontWeight.W_400
-                        ),
-                        ft.Container(height=4),
-                        ft.Text(
-                            "Ads only work on Android/iOS apps",
-                            size=12,
-                            color="#94a3b8",
-                            weight=ft.FontWeight.W_400
-                        ),
-                        ft.Container(height=8),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text("💡 Build for mobile:", size=11, color="#fbbf24", weight=ft.FontWeight.BOLD),
-                                    ft.Text("• flet build apk (Android)", size=10, color="#cbd5e1"),
-                                    ft.Text("• flet build ipa (iOS)", size=10, color="#cbd5e1"),
-                                ],
-                                spacing=2
-                            ),
-                            bgcolor=ft.Colors.with_opacity(0.1, "#fbbf24"),
-                            border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fbbf24")),
-                            border_radius=8,
-                            padding=10,
-                        )
-                    ],
-                    tight=True,
-                    spacing=0
-                ),
-                bgcolor="#1e293b",
-                duration=5000,
-                behavior=ft.SnackBarBehavior.FLOATING,
-                action="Got it",
-                action_color="#60a5fa",
-            )
-            
-            print("Adding snackbar to overlay")
-            page.overlay.append(snackbar)
-            snackbar.open = True
-            page.update()
-            print("SnackBar should be visible now")
-        except Exception as ex:
-            print(f"Error in show_support_message: {ex}")
-            import traceback
-            traceback.print_exc()
-    
     about_content = ft.Column(
         [
             ft.Container(
@@ -1263,62 +1006,6 @@ def main(page: ft.Page):
                             color="#94a3b8",
                             weight=ft.FontWeight.W_400,
                             text_align=ft.TextAlign.LEFT,
-                        ),
-                        ft.Container(height=20),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Text(
-                                        "Support the Developer",
-                                        size=15,
-                                        weight=ft.FontWeight.BOLD,
-                                        color="#f8fafc",
-                                    ),
-                                    ft.Container(height=8),
-                                    ft.Text(
-                                        "Help keep this app free and ad-free! Watch a quick ad to support development.",
-                                        size=13,
-                                        color="#94a3b8",
-                                        weight=ft.FontWeight.W_400,
-                                        text_align=ft.TextAlign.CENTER,
-                                    ),
-                                    ft.Container(height=12),
-                                    ft.Container(
-                                        content=ft.Row(
-                                            [
-                                                ft.Icon(ft.Icons.PLAY_CIRCLE_FILLED, color="#f472b6", size=22),
-                                                ft.Text(
-                                                    "Support Me - Watch Ad",
-                                                    size=14,
-                                                    color="#f8fafc",
-                                                    weight=ft.FontWeight.BOLD
-                                                )
-                                            ],
-                                            alignment=ft.MainAxisAlignment.CENTER,
-                                            spacing=10
-                                        ),
-                                        bgcolor=ft.Colors.with_opacity(0.15, "#f472b6"),
-                                        border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#f472b6")),
-                                        border_radius=14,
-                                        padding=16,
-                                        ink=True,
-                                        on_click=show_support_ad,
-                                        shadow=ft.BoxShadow(
-                                            spread_radius=0,
-                                            blur_radius=12,
-                                            color=ft.Colors.with_opacity(0.3, "#f472b6"),
-                                            offset=ft.Offset(0, 4)
-                                        ),
-                                        animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
-                                    ),
-                                ],
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                spacing=0
-                            ),
-                            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
-                            border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
-                            border_radius=12,
-                            padding=16,
                         ),
                         ft.Container(height=20),
                         ft.Container(
@@ -1417,22 +1104,36 @@ def main(page: ft.Page):
     
     # Main layout
     try:
-        page.add(
-            ft.Column(
-                [
-                    ft.Stack(
-                        [
-                            create_deco_circles(),
-                            page_container
-                        ],
-                        expand=True
-                    ),
-                    navbar
-                ],
-                spacing=0,
-                expand=True
-            )
+        main_content = ft.Column(
+            [
+                ft.Stack(
+                    [
+                        create_deco_circles(),
+                        page_container
+                    ],
+                    expand=True
+                ),
+                navbar
+            ],
+            spacing=0,
+            expand=True
         )
+        
+        # Add banner ad at the top if available
+        if banner_ad:
+            page.add(
+                ft.Column(
+                    [
+                        banner_ad,
+                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#475569")),
+                        main_content
+                    ],
+                    spacing=0,
+                    expand=True
+                )
+            )
+        else:
+            page.add(main_content)
         
         # Load initial quote
         fetch_quote(get_random_quote)

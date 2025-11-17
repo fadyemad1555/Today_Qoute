@@ -277,8 +277,11 @@ def main(page: ft.Page):
     
     # Banner ad state management
     ad_retry_count = 0
-    max_ad_retries = 3
-    ad_retry_delay = 5  # seconds
+    max_ad_retries = 3  # Fast retries
+    ad_retry_delay = 5  # seconds for fast retries
+    ad_loaded_successfully = False  # Track if ad loaded successfully
+    background_retry_delay = 20  # seconds for background retries
+    ad_retry_thread = None  # Keep track of retry thread
     
     def create_ad_placeholder(message="Ad Space"):
         """Create a placeholder for banner ad"""
@@ -303,20 +306,54 @@ def main(page: ft.Page):
         alignment=ft.alignment.center,
     )
     
+    def background_retry_ad():
+        """Keep retrying ad load in background every 20 seconds until success"""
+        global ad_loaded_successfully
+        
+        while not ad_loaded_successfully:
+            try:
+                print(f"Background retry: checking ad status (loaded={ad_loaded_successfully})")
+                time.sleep(background_retry_delay)
+                
+                if not ad_loaded_successfully:
+                    print("Background retry: attempting to load ad...")
+                    try:
+                        load_banner_ad()
+                    except Exception as e:
+                        print(f"Background retry failed: {e}")
+                else:
+                    print("Background retry: ad loaded successfully, stopping background retries")
+                    break
+            except Exception as e:
+                print(f"Error in background retry loop: {e}")
+                time.sleep(background_retry_delay)
+    
     def retry_banner_ad():
         """Retry loading banner ad after error"""
-        global ad_retry_count
+        global ad_retry_count, ad_retry_thread
+        
+        # Don't retry if ad already loaded successfully
+        if ad_loaded_successfully:
+            print("Ad already loaded successfully, skipping retry")
+            return
         
         if ad_retry_count >= max_ad_retries:
-            print(f"Max ad retries ({max_ad_retries}) reached, showing placeholder")
-            banner_ad_container.content = create_ad_placeholder("Ad Unavailable")
+            print(f"Fast retries ({max_ad_retries}) completed, starting background retries every {background_retry_delay}s")
+            banner_ad_container.content = create_ad_placeholder("Ad will retry...")
             page.update()
+            
+            # Start background retry thread if not already running
+            if ad_retry_thread is None or not ad_retry_thread.is_alive():
+                import threading
+                ad_retry_thread = threading.Thread(target=background_retry_ad, daemon=True)
+                ad_retry_thread.start()
+                print("Background retry thread started")
             return
         
         ad_retry_count += 1
-        print(f"Retrying banner ad (attempt {ad_retry_count}/{max_ad_retries})...")
+        print(f"Fast retry {ad_retry_count}/{max_ad_retries}...")
         
-        banner_ad_container.content = create_ad_placeholder(f"Retrying Ad {ad_retry_count}/{max_ad_retries}...")
+        banner_ad_container.content = create_ad_placeholder(f"Retrying {ad_retry_count}/{max_ad_retries}...")
         page.update()
         
         # Wait before retry
@@ -333,7 +370,12 @@ def main(page: ft.Page):
     
     def load_banner_ad():
         """Load banner ad with error handling and retry logic"""
-        global ad_retry_count
+        global ad_retry_count, ad_loaded_successfully
+        
+        # Don't reload if ad already loaded successfully
+        if ad_loaded_successfully:
+            print("Banner ad already loaded successfully, skipping reload")
+            return
         
         if not ADS_AVAILABLE or not is_mobile:
             banner_ad_container.content = create_ad_placeholder("Ad Space")
@@ -342,13 +384,24 @@ def main(page: ft.Page):
         
         try:
             def on_ad_load(e):
-                print("BannerAd loaded successfully")
+                global ad_loaded_successfully
+                print("🎉 BannerAd loaded successfully - will not refresh, background retries stopped")
+                ad_loaded_successfully = True  # Mark as loaded, prevent future reloads
                 ad_retry_count = 0  # Reset retry count on success
+                # Update placeholder to remove retry message
+                try:
+                    page.update()
+                except:
+                    pass
             
             def on_ad_error(e):
-                error_msg = e.data if hasattr(e, 'data') else str(e)
-                print(f"BannerAd error: {error_msg}")
-                retry_banner_ad()
+                # Only retry if ad hasn't loaded successfully yet
+                if not ad_loaded_successfully:
+                    error_msg = e.data if hasattr(e, 'data') else str(e)
+                    print(f"BannerAd error: {error_msg}")
+                    retry_banner_ad()
+                else:
+                    print("Ad error occurred but ad already loaded, ignoring")
             
             new_ad = fta.BannerAd(
                 unit_id=ad_ids.get(page.platform, {}).get("banner"),
@@ -372,7 +425,8 @@ def main(page: ft.Page):
             
         except Exception as e:
             print(f"Failed to create banner ad: {e}")
-            retry_banner_ad()
+            if not ad_loaded_successfully:
+                retry_banner_ad()
     
     # Initialize banner ad
     if ADS_AVAILABLE and is_mobile:

@@ -21,7 +21,7 @@ GADApplicationIdentifier = "ca-app-pub-3940256099942544~3347511713"
 # Docs: https://flet.dev/docs/publish
 [tool.flet]
 org = "com.mycompany"
-product = "flet-ads-example"
+product = "Today Qoute"
 company = "Flet"
 copyright = "Copyright (C) 2025 by Flet"
 

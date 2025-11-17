@@ -57,6 +57,7 @@ def can_make_request():
 
 
 def safe_api_request(url, timeout=8):
+    """Make API request with proper error handling and rate limiting"""
     global last_request_time
     
     can_request, wait_time = can_make_request()
@@ -73,46 +74,67 @@ def safe_api_request(url, timeout=8):
             print("Rate limit hit (429), using cache/offline quotes")
             return None
         
-        response.raise_for_status()
+        if response.status_code != 200:
+            print(f"API returned status code: {response.status_code}")
+            return None
+        
         return response
+    except requests.exceptions.Timeout:
+        print(f"Request timeout for {url}")
+        return None
+    except requests.exceptions.ConnectionError:
+        print(f"Connection error for {url}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Request exception: {e}")
+        return None
     except Exception as e:
-        print(f"API request failed: {e}")
+        print(f"Unexpected error in API request: {e}")
         return None
 
 
 def get_random_quote():
+    """Fetch random quote with comprehensive error handling"""
     global quote_cache, cache_index
     
     try:
+        # Use cache if available
         if quote_cache and cache_index < len(quote_cache):
             quote = quote_cache[cache_index]
             cache_index += 1
             return {
-                "text": quote['q'],
-                "author": quote['a'],
+                "text": quote.get('q', ''),
+                "author": quote.get('a', 'Unknown'),
                 "source": "Random Quote",
                 "success": True
             }
         
+        # Try API request
         response = safe_api_request("https://zenquotes.io/api/quotes")
         
         if response:
             try:
                 data = response.json()
                 if data and isinstance(data, list) and len(data) > 0:
-                    quote_cache = data
-                    cache_index = 0
-                    quote = random.choice(data)
-                    return {
-                        "text": quote['q'],
-                        "author": quote['a'],
-                        "source": "Random Quote",
-                        "success": True
-                    }
+                    # Validate quote data
+                    valid_quotes = [q for q in data if q.get('q') and q.get('a')]
+                    if valid_quotes:
+                        quote_cache = valid_quotes
+                        cache_index = 0
+                        quote = random.choice(valid_quotes)
+                        return {
+                            "text": quote.get('q', ''),
+                            "author": quote.get('a', 'Unknown'),
+                            "source": "Random Quote",
+                            "success": True
+                        }
+            except ValueError as e:
+                print(f"JSON parsing error: {e}")
             except Exception as e:
-                print(f"Failed to parse response: {e}")
+                print(f"Error processing API response: {e}")
         
         # Fallback to offline quotes
+        print("Using offline quotes as fallback")
         quote = random.choice(OFFLINE_QUOTES)
         return {
             "text": quote['q'],
@@ -121,23 +143,25 @@ def get_random_quote():
             "success": True
         }
     except Exception as e:
-        print(f"Error in get_random_quote: {e}")
-        quote = random.choice(OFFLINE_QUOTES)
+        print(f"Critical error in get_random_quote: {e}")
+        # Last resort fallback
         return {
-            "text": quote['q'],
-            "author": quote['a'],
+            "text": "Every moment is a fresh beginning.",
+            "author": "T.S. Eliot",
             "source": "Offline Quote",
             "success": True
         }
 
 
 def get_quote_of_day():
+    """Fetch quote of the day with error handling"""
     global daily_quote_cache, daily_quote_date
     
     try:
         import datetime
         today = datetime.date.today().isoformat()
         
+        # Return cached daily quote if available
         if daily_quote_cache and daily_quote_date == today:
             return daily_quote_cache
         
@@ -147,29 +171,36 @@ def get_quote_of_day():
             try:
                 data = response.json()
                 if data and isinstance(data, list) and len(data) > 0:
-                    result = {
-                        "text": data[0]['q'],
-                        "author": data[0]['a'],
-                        "source": "Quote of the Day",
-                        "success": True
-                    }
-                    daily_quote_cache = result
-                    daily_quote_date = today
-                    return result
+                    quote = data[0]
+                    if quote.get('q') and quote.get('a'):
+                        result = {
+                            "text": quote['q'],
+                            "author": quote['a'],
+                            "source": "Quote of the Day",
+                            "success": True
+                        }
+                        daily_quote_cache = result
+                        daily_quote_date = today
+                        return result
+            except ValueError as e:
+                print(f"JSON parsing error for daily quote: {e}")
             except Exception as e:
-                print(f"Failed to parse daily quote: {e}")
+                print(f"Error processing daily quote: {e}")
         
+        # Fallback to random quote
+        print("Daily quote unavailable, using random quote")
         return get_random_quote()
     except Exception as e:
-        print(f"Error in get_quote_of_day: {e}")
+        print(f"Critical error in get_quote_of_day: {e}")
         return get_random_quote()
 
 
 def get_browse_quotes():
+    """Fetch browse quotes with error handling"""
     global browse_quotes_cache, browse_cache_time
     
     try:
-        # Cache browse quotes for 1 hour
+        # Use cache if recent (1 hour)
         current_time = time.time()
         if browse_quotes_cache and browse_cache_time and (current_time - browse_cache_time < 3600):
             return {"quotes": browse_quotes_cache, "success": True, "source": "cache"}
@@ -180,19 +211,24 @@ def get_browse_quotes():
             try:
                 data = response.json()
                 if data and isinstance(data, list) and len(data) > 0:
-                    browse_quotes_cache = data
-                    browse_cache_time = current_time
-                    return {"quotes": data, "success": True, "source": "api"}
+                    # Validate quotes
+                    valid_quotes = [q for q in data if q.get('q') and q.get('a')]
+                    if valid_quotes:
+                        browse_quotes_cache = valid_quotes
+                        browse_cache_time = current_time
+                        return {"quotes": valid_quotes, "success": True, "source": "api"}
+            except ValueError as e:
+                print(f"JSON parsing error for browse quotes: {e}")
             except Exception as e:
-                print(f"Failed to parse browse quotes: {e}")
+                print(f"Error processing browse quotes: {e}")
         
-        # Return offline quotes if API fails
+        # Use offline quotes as fallback
         if not browse_quotes_cache:
             browse_quotes_cache = OFFLINE_QUOTES
         
         return {"quotes": browse_quotes_cache, "success": True, "source": "offline"}
     except Exception as e:
-        print(f"Error in get_browse_quotes: {e}")
+        print(f"Critical error in get_browse_quotes: {e}")
         if not browse_quotes_cache:
             browse_quotes_cache = OFFLINE_QUOTES
         return {"quotes": browse_quotes_cache, "success": True, "source": "offline"}
@@ -222,63 +258,94 @@ def main(page: ft.Page):
         },
     }
     
-    # Create banner ad for mobile
-    banner_ad = None
-    if ADS_AVAILABLE and is_mobile:
-        try:
-            banner_ad = ft.Container(
-                width=320,
-                height=50,
-                bgcolor=ft.Colors.TRANSPARENT,
-                content=fta.BannerAd(
-                    unit_id=ad_ids.get(page.platform, {}).get("banner"),
-                    on_click=lambda e: print("BannerAd clicked"),
-                    on_load=lambda e: print("BannerAd loaded"),
-                    on_error=lambda e: print("BannerAd error", e.data),
-                    on_open=lambda e: print("BannerAd opened"),
-                    on_close=lambda e: print("BannerAd closed"),
-                    on_impression=lambda e: print("BannerAd impression"),
-                    on_will_dismiss=lambda e: print("BannerAd will dismiss"),
-                ),
-                alignment=ft.alignment.center,
+    # Create banner ad - always show placeholder even if ads not available
+    def get_banner_ad_container():
+        """Returns banner ad container or placeholder"""
+        if ADS_AVAILABLE and is_mobile:
+            try:
+                return ft.Container(
+                    width=320,
+                    height=50,
+                    bgcolor=ft.Colors.TRANSPARENT,
+                    alignment=ft.alignment.center,
+                    content=fta.BannerAd(
+                        unit_id=ad_ids.get(page.platform, {}).get("banner"),
+                        on_click=lambda e: print("BannerAd clicked"),
+                        on_load=lambda e: print("BannerAd loaded"),
+                        on_error=lambda e: print("BannerAd error:", e.data if hasattr(e, 'data') else e),
+                        on_open=lambda e: print("BannerAd opened"),
+                        on_close=lambda e: print("BannerAd closed"),
+                        on_impression=lambda e: print("BannerAd impression"),
+                        on_will_dismiss=lambda e: print("BannerAd will dismiss"),
+                    ),
+                )
+            except Exception as e:
+                print(f"Failed to create banner ad: {e}")
+                return create_ad_placeholder()
+        else:
+            # Show placeholder for non-mobile or when ads unavailable
+            return create_ad_placeholder()
+    
+    def create_ad_placeholder():
+        """Create a placeholder for banner ad"""
+        return ft.Container(
+            width=320,
+            height=50,
+            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+            border=ft.border.all(1, ft.Colors.with_opacity(0.1, "#475569")),
+            border_radius=8,
+            alignment=ft.alignment.center,
+            content=ft.Text(
+                "Ad Space" if not is_mobile else "Ad Loading...",
+                size=10,
+                color="#64748b",
+                weight=ft.FontWeight.W_400
             )
-            print("Banner ad created successfully")
-        except Exception as e:
-            print(f"Failed to create banner ad: {e}")
-            banner_ad = None
+        )
+    
+    # Create banner ad container
+    banner_ad_container = get_banner_ad_container()
     
     # Animated decorative elements
     def create_deco_circles():
-        return ft.Container(
-            content=ft.Stack(
-                [
-                    ft.Container(
-                        width=400,
-                        height=400,
-                        border_radius=200,
-                        bgcolor=ft.Colors.with_opacity(0.03, "#fbbf24"),
-                        blur=ft.Blur(50, 50, ft.BlurTileMode.CLAMP),
-                        left=-100,
-                        top=-150
-                    ),
-                    ft.Container(
-                        width=300,
-                        height=300,
-                        border_radius=150,
-                        bgcolor=ft.Colors.with_opacity(0.02, "#60a5fa"),
-                        blur=ft.Blur(40, 40, ft.BlurTileMode.CLAMP),
-                        right=-80,
-                        bottom=-100
-                    ),
-                ]
-            ),
-            expand=True
-        )
+        try:
+            return ft.Container(
+                content=ft.Stack(
+                    [
+                        ft.Container(
+                            width=400,
+                            height=400,
+                            border_radius=200,
+                            bgcolor=ft.Colors.with_opacity(0.03, "#fbbf24"),
+                            blur=ft.Blur(50, 50, ft.BlurTileMode.CLAMP),
+                            left=-100,
+                            top=-150
+                        ),
+                        ft.Container(
+                            width=300,
+                            height=300,
+                            border_radius=150,
+                            bgcolor=ft.Colors.with_opacity(0.02, "#60a5fa"),
+                            blur=ft.Blur(40, 40, ft.BlurTileMode.CLAMP),
+                            right=-80,
+                            bottom=-100
+                        ),
+                    ]
+                ),
+                expand=True
+            )
+        except Exception as e:
+            print(f"Error creating decorative circles: {e}")
+            return ft.Container(expand=True)
     
     # Navigation bar
     def create_nav_button(icon, label, page_name, is_active=False):
         def on_nav_click(e):
-            switch_page(page_name)
+            try:
+                switch_page(page_name)
+            except Exception as ex:
+                print(f"Error in navigation click: {ex}")
+                show_error("Navigation error occurred")
         
         return ft.Container(
             content=ft.Column(
@@ -328,13 +395,16 @@ def main(page: ft.Page):
     )
     
     def update_nav_active(active_page):
-        for nav, page_name in [(nav_home, "home"), (nav_browse, "browse"), (nav_about, "about")]:
-            is_active = page_name == active_page
-            nav.bgcolor = ft.Colors.with_opacity(0.1, "#fbbf24") if is_active else None
-            nav.content.controls[0].color = "#fbbf24" if is_active else "#64748b"
-            nav.content.controls[1].color = "#fbbf24" if is_active else "#64748b"
-            nav.content.controls[1].weight = ft.FontWeight.BOLD if is_active else ft.FontWeight.W_500
-        page.update()
+        try:
+            for nav, page_name in [(nav_home, "home"), (nav_browse, "browse"), (nav_about, "about")]:
+                is_active = page_name == active_page
+                nav.bgcolor = ft.Colors.with_opacity(0.1, "#fbbf24") if is_active else None
+                nav.content.controls[0].color = "#fbbf24" if is_active else "#64748b"
+                nav.content.controls[1].color = "#fbbf24" if is_active else "#64748b"
+                nav.content.controls[1].weight = ft.FontWeight.BOLD if is_active else ft.FontWeight.W_500
+            page.update()
+        except Exception as e:
+            print(f"Error updating navigation: {e}")
     
     # Home Page Components
     quote_icon = ft.Icon(
@@ -435,24 +505,31 @@ def main(page: ft.Page):
     )
     
     def show_error(message):
-        error_container.content.controls[1].value = message
-        error_container.visible = True
-        page.update()
+        try:
+            if error_container and error_container.content:
+                error_container.content.controls[1].value = message
+                error_container.visible = True
+                page.update()
+        except Exception as e:
+            print(f"Error showing error message: {e}")
     
     def hide_error():
-        error_container.visible = False
-        page.update()
+        try:
+            error_container.visible = False
+            page.update()
+        except Exception as e:
+            print(f"Error hiding error message: {e}")
     
     def update_quote_display(quote_data):
         try:
             loading_container.visible = False
             
-            if quote_data.get("success"):
+            if quote_data.get("success") and quote_data.get("text"):
                 hide_error()
                 current_quote.update(quote_data)
                 quote_text.value = f'"{quote_data["text"]}"'
-                author_text.value = f"— {quote_data['author']}"
-                source_badge.content.controls[1].value = quote_data.get('source', '')
+                author_text.value = f"— {quote_data.get('author', 'Unknown')}"
+                source_badge.content.controls[1].value = quote_data.get('source', 'Quote')
                 source_badge.visible = True
                 quote_text.visible = True
                 author_text.visible = True
@@ -469,7 +546,7 @@ def main(page: ft.Page):
             quote_text.visible = False
             author_text.visible = False
             source_badge.visible = False
-            show_error("Error displaying quote. Please try again.")
+            show_error("Error displaying quote")
             page.update()
     
     def fetch_quote(fetch_function, *args):
@@ -486,22 +563,30 @@ def main(page: ft.Page):
         except Exception as e:
             print(f"Error fetching quote: {e}")
             loading_container.visible = False
-            show_error("Failed to fetch quote. Please try again.")
+            show_error("Failed to fetch quote")
             page.update()
     
     def on_random_click(e):
-        fetch_quote(get_random_quote)
+        try:
+            fetch_quote(get_random_quote)
+        except Exception as ex:
+            print(f"Error in random click handler: {ex}")
+            show_error("Error loading random quote")
     
     def on_daily_click(e):
-        fetch_quote(get_quote_of_day)
+        try:
+            fetch_quote(get_quote_of_day)
+        except Exception as ex:
+            print(f"Error in daily click handler: {ex}")
+            show_error("Error loading daily quote")
     
     def on_copy_click(e):
         try:
             if not current_quote.get("text"):
-                show_error("⚠️ No quote to copy")
+                show_error("No quote to copy")
                 return
             
-            full_text = f'{current_quote["text"]}\n— {current_quote["author"]}'
+            full_text = f'{current_quote["text"]}\n— {current_quote.get("author", "Unknown")}'
             page.set_clipboard(full_text)
             
             snackbar = ft.SnackBar(
@@ -705,7 +790,13 @@ def main(page: ft.Page):
     def create_quote_card(quote_data, index):
         def copy_quote(e):
             try:
-                full_text = f'{quote_data["q"]}\n— {quote_data["a"]}'
+                quote_text_val = quote_data.get("q", "")
+                author_val = quote_data.get("a", "Unknown")
+                
+                if not quote_text_val:
+                    return
+                
+                full_text = f'{quote_text_val}\n— {author_val}'
                 page.set_clipboard(full_text)
                 
                 snackbar = ft.SnackBar(
@@ -736,6 +827,9 @@ def main(page: ft.Page):
         ]
         primary_color, secondary_color = colors[index % len(colors)]
         
+        quote_text_val = quote_data.get("q", "No quote available")
+        author_val = quote_data.get("a", "Unknown")
+        
         return ft.Container(
             content=ft.Column(
                 [
@@ -759,7 +853,7 @@ def main(page: ft.Page):
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
                     ft.Text(
-                        f'"{quote_data["q"]}"',
+                        f'"{quote_text_val}"',
                         size=15,
                         color="#f8fafc",
                         weight=ft.FontWeight.W_500,
@@ -767,7 +861,7 @@ def main(page: ft.Page):
                     ),
                     ft.Container(height=8),
                     ft.Text(
-                        f"— {quote_data['a']}",
+                        f"— {author_val}",
                         size=12,
                         color="#94a3b8",
                         italic=True,
@@ -797,9 +891,8 @@ def main(page: ft.Page):
                 browse_loading.visible = True
             else:
                 # Remove the "Load More" button and attribution if they exist
-                if len(browse_quotes_list.controls) > 0:
-                    # Remove last 2 items (attribution and load more button)
-                    browse_quotes_list.controls = browse_quotes_list.controls[:-2] if len(browse_quotes_list.controls) >= 2 else []
+                if len(browse_quotes_list.controls) >= 2:
+                    browse_quotes_list.controls = browse_quotes_list.controls[:-2]
             
             page.update()
             
@@ -809,10 +902,17 @@ def main(page: ft.Page):
             
             if result.get("success"):
                 quotes = result.get("quotes", [])
+                if not quotes:
+                    raise ValueError("No quotes returned from API")
+                
                 start_index = len([c for c in browse_quotes_list.controls if isinstance(c, ft.Container)])
                 
                 for i, quote in enumerate(quotes):
-                    browse_quotes_list.controls.append(create_quote_card(quote, start_index + i))
+                    try:
+                        browse_quotes_list.controls.append(create_quote_card(quote, start_index + i))
+                    except Exception as card_error:
+                        print(f"Error creating quote card: {card_error}")
+                        continue
                 
                 # Add "Load More" button
                 def on_load_more(e):
@@ -820,6 +920,7 @@ def main(page: ft.Page):
                         load_browse_quotes(append=True)
                     except Exception as ex:
                         print(f"Error loading more quotes: {ex}")
+                        show_error("Failed to load more quotes")
                 
                 load_more_button = ft.Container(
                     content=ft.Row(
@@ -866,21 +967,11 @@ def main(page: ft.Page):
                     )
                 )
             else:
-                browse_quotes_list.controls.append(
-                    ft.Container(
-                        content=ft.Text(
-                            "Failed to load quotes. Please try again.",
-                            size=13,
-                            color="#fb923c",
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                        padding=20
-                    )
-                )
+                raise ValueError("Failed to fetch quotes")
             
             page.update()
         except Exception as e:
-            print(f"Error in load_browse_quotes: {e}")
+            print(f"Critical error in load_browse_quotes: {e}")
             browse_loading.visible = False
             browse_quotes_list.controls.clear()
             browse_quotes_list.controls.append(
@@ -890,7 +981,7 @@ def main(page: ft.Page):
                             ft.Icon(ft.Icons.ERROR_OUTLINE, color="#fb923c", size=40),
                             ft.Container(height=12),
                             ft.Text(
-                                "Something went wrong",
+                                "Unable to Load Quotes",
                                 size=15,
                                 color="#f8fafc",
                                 weight=ft.FontWeight.BOLD,
@@ -898,10 +989,18 @@ def main(page: ft.Page):
                             ),
                             ft.Container(height=8),
                             ft.Text(
-                                "Please try again later",
+                                "Please check your connection and try again",
                                 size=13,
                                 color="#94a3b8",
                                 text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Container(height=16),
+                            ft.ElevatedButton(
+                                "Retry",
+                                icon=ft.Icons.REFRESH_ROUNDED,
+                                on_click=lambda e: load_browse_quotes(),
+                                bgcolor="#fbbf24",
+                                color="#0f172a",
                             ),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -978,7 +1077,7 @@ def main(page: ft.Page):
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Text(
-                            "Version 2.0",
+                            "Version 2.1",
                             size=13,
                             color="#64748b",
                             text_align=ft.TextAlign.CENTER,
@@ -1023,6 +1122,8 @@ def main(page: ft.Page):
                                     ft.Text("• Browse extensive collection", size=13, color="#94a3b8"),
                                     ft.Text("• One-tap copy to clipboard", size=13, color="#94a3b8"),
                                     ft.Text("• Beautiful modern interface", size=13, color="#94a3b8"),
+                                    ft.Text("• Offline quote support", size=13, color="#94a3b8"),
+                                    ft.Text("• Smart error handling", size=13, color="#94a3b8"),
                                 ],
                                 spacing=6
                             ),
@@ -1099,8 +1200,8 @@ def main(page: ft.Page):
                 update_nav_active("about")
             page.update()
         except Exception as e:
-            print(f"Error switching page: {e}")
-            page.update()
+            print(f"Critical error switching page: {e}")
+            show_error(f"Navigation error: {str(e)[:50]}")
     
     # Main layout
     try:
@@ -1119,26 +1220,27 @@ def main(page: ft.Page):
             expand=True
         )
         
-        # Add banner ad at the top if available
-        if banner_ad:
-            page.add(
-                ft.Column(
-                    [
-                        banner_ad,
-                        ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#475569")),
-                        main_content
-                    ],
-                    spacing=0,
-                    expand=True
-                )
+        # Always add banner ad at the top
+        page.add(
+            ft.Column(
+                [
+                    ft.Container(
+                        content=banner_ad_container,
+                        alignment=ft.alignment.center,
+                        padding=ft.padding.symmetric(vertical=8)
+                    ),
+                    ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#475569")),
+                    main_content
+                ],
+                spacing=0,
+                expand=True
             )
-        else:
-            page.add(main_content)
+        )
         
         # Load initial quote
         fetch_quote(get_random_quote)
     except Exception as e:
-        print(f"Error initializing app: {e}")
+        print(f"Critical error initializing app: {e}")
         # Show error screen
         error_screen = ft.Container(
             content=ft.Column(
@@ -1146,7 +1248,7 @@ def main(page: ft.Page):
                     ft.Icon(ft.Icons.ERROR_OUTLINE, color="#fb923c", size=64),
                     ft.Container(height=20),
                     ft.Text(
-                        "Oops! Something went wrong",
+                        "App Initialization Failed",
                         size=20,
                         color="#f8fafc",
                         weight=ft.FontWeight.BOLD,
@@ -1159,12 +1261,21 @@ def main(page: ft.Page):
                         color="#94a3b8",
                         text_align=ft.TextAlign.CENTER,
                     ),
+                    ft.Container(height=8),
+                    ft.Text(
+                        f"Error: {str(e)[:100]}",
+                        size=11,
+                        color="#64748b",
+                        text_align=ft.TextAlign.CENTER,
+                        italic=True,
+                    ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
             expand=True,
             alignment=ft.alignment.center,
+            padding=40,
         )
         page.add(error_screen)
 

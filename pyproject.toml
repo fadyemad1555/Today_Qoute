@@ -1,7 +1,7 @@
 [project]
 name = "Today Qoute"
 version = "1.0.0"
-description = "flet-ads-example"
+description = "Today Qoute"
 requires-python = ">=3.10"
 dependencies = [
     "flet-ads",
@@ -20,9 +20,9 @@ GADApplicationIdentifier = "ca-app-pub-3940256099942544~3347511713"
 
 # Docs: https://flet.dev/docs/publish
 [tool.flet]
-org = "com.mycompany"
+org = "com.today_qoute"
 product = "Today Qoute"
-company = "Flet"
+company = "fady_dev"
 copyright = "Copyright (C) 2025 by Flet"
 
 [tool.flet.app]

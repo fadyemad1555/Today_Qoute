@@ -154,17 +154,20 @@ def get_random_quote():
 
 
 def get_quote_of_day():
-    """Fetch quote of the day with error handling"""
+    """Fetch quote of the day with error handling and smart caching"""
     global daily_quote_cache, daily_quote_date
     
     try:
         import datetime
         today = datetime.date.today().isoformat()
         
-        # Return cached daily quote if available
+        # Return cached daily quote if available for today
         if daily_quote_cache and daily_quote_date == today:
+            print("Using cached daily quote")
             return daily_quote_cache
         
+        # Fetch new daily quote
+        print("Fetching fresh daily quote from API")
         response = safe_api_request("https://zenquotes.io/api/today")
         
         if response:
@@ -179,19 +182,33 @@ def get_quote_of_day():
                             "source": "Quote of the Day",
                             "success": True
                         }
+                        # Cache the daily quote
                         daily_quote_cache = result
                         daily_quote_date = today
+                        print(f"Daily quote cached for {today}")
                         return result
             except ValueError as e:
                 print(f"JSON parsing error for daily quote: {e}")
             except Exception as e:
                 print(f"Error processing daily quote: {e}")
         
-        # Fallback to random quote
-        print("Daily quote unavailable, using random quote")
-        return get_random_quote()
+        # If API fails but we have a cached quote from a previous day, use it with updated source
+        if daily_quote_cache:
+            print("API failed, using previous daily quote")
+            cached_quote = daily_quote_cache.copy()
+            cached_quote["source"] = "Previous Daily Quote"
+            return cached_quote
+        
+        # Last resort: fallback to random quote
+        print("No cached daily quote available, using random quote")
+        random_quote = get_random_quote()
+        random_quote["source"] = "Quote of the Day (Offline)"
+        return random_quote
     except Exception as e:
         print(f"Critical error in get_quote_of_day: {e}")
+        # Try to return cached quote even if date check fails
+        if daily_quote_cache:
+            return daily_quote_cache
         return get_random_quote()
 
 
@@ -258,35 +275,12 @@ def main(page: ft.Page):
         },
     }
     
-    # Create banner ad - always show placeholder even if ads not available
-    def get_banner_ad_container():
-        """Returns banner ad container or placeholder"""
-        if ADS_AVAILABLE and is_mobile:
-            try:
-                return ft.Container(
-                    width=320,
-                    height=50,
-                    bgcolor=ft.Colors.TRANSPARENT,
-                    alignment=ft.alignment.center,
-                    content=fta.BannerAd(
-                        unit_id=ad_ids.get(page.platform, {}).get("banner"),
-                        on_click=lambda e: print("BannerAd clicked"),
-                        on_load=lambda e: print("BannerAd loaded"),
-                        on_error=lambda e: print("BannerAd error:", e.data if hasattr(e, 'data') else e),
-                        on_open=lambda e: print("BannerAd opened"),
-                        on_close=lambda e: print("BannerAd closed"),
-                        on_impression=lambda e: print("BannerAd impression"),
-                        on_will_dismiss=lambda e: print("BannerAd will dismiss"),
-                    ),
-                )
-            except Exception as e:
-                print(f"Failed to create banner ad: {e}")
-                return create_ad_placeholder()
-        else:
-            # Show placeholder for non-mobile or when ads unavailable
-            return create_ad_placeholder()
+    # Banner ad state management
+    ad_retry_count = 0
+    max_ad_retries = 3
+    ad_retry_delay = 5  # seconds
     
-    def create_ad_placeholder():
+    def create_ad_placeholder(message="Ad Space"):
         """Create a placeholder for banner ad"""
         return ft.Container(
             width=320,
@@ -296,15 +290,93 @@ def main(page: ft.Page):
             border_radius=8,
             alignment=ft.alignment.center,
             content=ft.Text(
-                "Ad Space" if not is_mobile else "Ad Loading...",
+                message,
                 size=10,
                 color="#64748b",
                 weight=ft.FontWeight.W_400
             )
         )
     
-    # Create banner ad container
-    banner_ad_container = get_banner_ad_container()
+    # Create banner ad container reference
+    banner_ad_container = ft.Container(
+        content=create_ad_placeholder("Ad Loading..." if is_mobile and ADS_AVAILABLE else "Ad Space"),
+        alignment=ft.alignment.center,
+    )
+    
+    def retry_banner_ad():
+        """Retry loading banner ad after error"""
+        global ad_retry_count
+        
+        if ad_retry_count >= max_ad_retries:
+            print(f"Max ad retries ({max_ad_retries}) reached, showing placeholder")
+            banner_ad_container.content = create_ad_placeholder("Ad Unavailable")
+            page.update()
+            return
+        
+        ad_retry_count += 1
+        print(f"Retrying banner ad (attempt {ad_retry_count}/{max_ad_retries})...")
+        
+        banner_ad_container.content = create_ad_placeholder(f"Retrying Ad {ad_retry_count}/{max_ad_retries}...")
+        page.update()
+        
+        # Wait before retry
+        import threading
+        def delayed_retry():
+            time.sleep(ad_retry_delay)
+            try:
+                load_banner_ad()
+            except Exception as e:
+                print(f"Retry failed: {e}")
+                retry_banner_ad()
+        
+        threading.Thread(target=delayed_retry, daemon=True).start()
+    
+    def load_banner_ad():
+        """Load banner ad with error handling and retry logic"""
+        global ad_retry_count
+        
+        if not ADS_AVAILABLE or not is_mobile:
+            banner_ad_container.content = create_ad_placeholder("Ad Space")
+            page.update()
+            return
+        
+        try:
+            def on_ad_load(e):
+                print("BannerAd loaded successfully")
+                ad_retry_count = 0  # Reset retry count on success
+            
+            def on_ad_error(e):
+                error_msg = e.data if hasattr(e, 'data') else str(e)
+                print(f"BannerAd error: {error_msg}")
+                retry_banner_ad()
+            
+            new_ad = fta.BannerAd(
+                unit_id=ad_ids.get(page.platform, {}).get("banner"),
+                on_click=lambda e: print("BannerAd clicked"),
+                on_load=on_ad_load,
+                on_error=on_ad_error,
+                on_open=lambda e: print("BannerAd opened"),
+                on_close=lambda e: print("BannerAd closed"),
+                on_impression=lambda e: print("BannerAd impression"),
+                on_will_dismiss=lambda e: print("BannerAd will dismiss"),
+            )
+            
+            banner_ad_container.content = ft.Container(
+                width=320,
+                height=50,
+                bgcolor=ft.Colors.TRANSPARENT,
+                alignment=ft.alignment.center,
+                content=new_ad,
+            )
+            page.update()
+            
+        except Exception as e:
+            print(f"Failed to create banner ad: {e}")
+            retry_banner_ad()
+    
+    # Initialize banner ad
+    if ADS_AVAILABLE and is_mobile:
+        load_banner_ad()
     
     # Animated decorative elements
     def create_deco_circles():
@@ -575,10 +647,19 @@ def main(page: ft.Page):
     
     def on_daily_click(e):
         try:
-            fetch_quote(get_quote_of_day)
+            # Check if we already have today's quote cached
+            import datetime
+            today = datetime.date.today().isoformat()
+            
+            if daily_quote_cache and daily_quote_date == today:
+                # Show cached daily quote immediately
+                update_quote_display(daily_quote_cache)
+            else:
+                # Fetch fresh daily quote
+                fetch_quote(get_quote_of_day)
         except Exception as ex:
             print(f"Error in daily click handler: {ex}")
-            show_error("Error loading daily quote")
+            fetch_quote(get_quote_of_day)
     
     def on_copy_click(e):
         try:
@@ -650,26 +731,49 @@ def main(page: ft.Page):
         height=340,
     )
     
-    # Action buttons
-    def create_button(icon, label, on_click, is_primary=False):
+    # Action buttons with visual indicators
+    def create_button(icon, label, on_click, is_primary=False, badge_text=None):
+        button_content = ft.Column(
+            [
+                ft.Stack(
+                    [
+                        ft.Icon(
+                            icon,
+                            color="#0f172a" if is_primary else "#fbbf24",
+                            size=24
+                        ),
+                        # Badge indicator
+                        ft.Container(
+                            content=ft.Text(
+                                badge_text if badge_text else "",
+                                size=8,
+                                color="#fff",
+                                weight=ft.FontWeight.BOLD
+                            ),
+                            bgcolor="#10b981",
+                            border_radius=8,
+                            padding=ft.padding.symmetric(horizontal=4, vertical=2),
+                            right=-5,
+                            top=-5,
+                            visible=badge_text is not None
+                        ) if badge_text else ft.Container(),
+                    ],
+                    width=24,
+                    height=24,
+                ),
+                ft.Text(
+                    label,
+                    size=11,
+                    color="#0f172a" if is_primary else "#fbbf24",
+                    weight=ft.FontWeight.BOLD
+                )
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        )
+        
         return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Icon(
-                        icon,
-                        color="#0f172a" if is_primary else "#fbbf24",
-                        size=24
-                    ),
-                    ft.Text(
-                        label,
-                        size=11,
-                        color="#0f172a" if is_primary else "#fbbf24",
-                        weight=ft.FontWeight.BOLD
-                    )
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=6
-            ),
+            content=button_content,
             bgcolor="#fbbf24" if is_primary else ft.Colors.with_opacity(0.05, "#1e293b"),
             border=None if is_primary else ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
             border_radius=14,
@@ -686,8 +790,14 @@ def main(page: ft.Page):
             animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
     
-    button_random = create_button(ft.Icons.SHUFFLE_ROUNDED, "Random", on_random_click, True)
-    button_daily = create_button(ft.Icons.TODAY_ROUNDED, "Daily", on_daily_click, False)
+    # Check if daily quote is available
+    def has_daily_quote():
+        import datetime
+        today = datetime.date.today().isoformat()
+        return daily_quote_cache and daily_quote_date == today
+    
+    button_random = create_button(ft.Icons.SHUFFLE_ROUNDED, "Random", on_random_click, False)
+    button_daily = create_button(ft.Icons.TODAY_ROUNDED, "Daily", on_daily_click, True, "★")
     button_copy = create_button(ft.Icons.CONTENT_COPY_ROUNDED, "Copy", on_copy_click, False)
     
     buttons_row = ft.Row(
@@ -1220,14 +1330,22 @@ def main(page: ft.Page):
             expand=True
         )
         
-        # Always add banner ad at the top
+        # Always add banner ad below the safe area
         page.add(
             ft.Column(
                 [
                     ft.Container(
-                        content=banner_ad_container,
+                        content=ft.Column(
+                            [
+                                ft.Container(height=5),  # Top spacing for safe area
+                                banner_ad_container,
+                                ft.Container(height=5),  # Bottom spacing
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=0,
+                        ),
+                        bgcolor=ft.Colors.with_opacity(0.3, "#0a0e1a"),
                         alignment=ft.alignment.center,
-                        padding=ft.padding.symmetric(vertical=8)
                     ),
                     ft.Divider(height=1, color=ft.Colors.with_opacity(0.1, "#475569")),
                     main_content
@@ -1237,8 +1355,8 @@ def main(page: ft.Page):
             )
         )
         
-        # Load initial quote
-        fetch_quote(get_random_quote)
+        # Load initial quote - prioritize daily quote on app start
+        fetch_quote(get_quote_of_day)
     except Exception as e:
         print(f"Critical error initializing app: {e}")
         # Show error screen

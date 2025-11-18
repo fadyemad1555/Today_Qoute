@@ -1,8 +1,27 @@
+"""
+Quote Explorer - A modern inspirational quotes app built with Flet
+
+Features:
+- Daily featured quotes with smart caching
+- Random inspirational quotes
+- Browse extensive quote collection
+- One-tap clipboard copy
+- Event-driven banner ad loading (no threading/async)
+- Comprehensive offline support
+- Smart error handling and recovery
+
+Banner Ad Logic:
+- Pure event-driven approach (no threads, no async, no timers)
+- Attempts to load on every user interaction
+- Once loaded successfully, never tries again
+- Perfect for offline-to-online transitions
+- Works seamlessly with Flet's architecture
+"""
+
 import flet as ft
 import requests
 import time
 import random
-import asyncio
 
 # Try to import ads, but gracefully handle if not available
 try:
@@ -260,6 +279,11 @@ def main(page: ft.Page):
     page.padding = 0
     page.bgcolor = "#0a0e1a"
     
+    # Banner ad state management - Define globally at start
+    global ad_loaded_successfully, ad_load_attempted
+    ad_loaded_successfully = False
+    ad_load_attempted = False
+    
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
     
@@ -276,14 +300,7 @@ def main(page: ft.Page):
         },
     }
     
-    # Banner ad state management
-    ad_retry_count = 0
-    max_ad_retries = 3  # Fast retries
-    ad_retry_delay = 5  # seconds for fast retries
-    ad_loaded_successfully = False  # Track if ad loaded successfully
-    background_retry_delay = 20  # seconds for background retries
-    background_retry_running = False  # Track if background retry is running
-    
+    # Banner ad state management - Simple event-driven approach
     def create_ad_placeholder(message="Ad Space"):
         """Create a placeholder for banner ad"""
         return ft.Container(
@@ -303,111 +320,51 @@ def main(page: ft.Page):
     
     # Create banner ad container reference
     banner_ad_container = ft.Container(
-        content=create_ad_placeholder("Ad Loading..." if is_mobile and ADS_AVAILABLE else "Ad Space"),
+        content=create_ad_placeholder("Tap to load ad" if is_mobile and ADS_AVAILABLE else "Ad Space"),
         alignment=ft.alignment.center,
     )
     
-    async def background_retry_ad():
-        """Keep retrying ad load in background every 20 seconds until success"""
-        global ad_loaded_successfully, background_retry_running
+    def try_load_banner_ad():
+        """Try to load banner ad on every user interaction - No threading, pure event-driven"""
+        global ad_loaded_successfully, ad_load_attempted
         
-        background_retry_running = True
-        print("Background retry task started")
-        
-        while not ad_loaded_successfully:
-            try:
-                print(f"Background retry: waiting {background_retry_delay}s... (loaded={ad_loaded_successfully})")
-                await asyncio.sleep(background_retry_delay)
-                
-                if not ad_loaded_successfully:
-                    print("Background retry: attempting to load ad...")
-                    try:
-                        load_banner_ad()
-                    except Exception as e:
-                        print(f"Background retry failed: {e}")
-                else:
-                    print("Background retry: ad loaded successfully, stopping background retries")
-                    break
-            except Exception as e:
-                print(f"Error in background retry loop: {e}")
-                await asyncio.sleep(background_retry_delay)
-        
-        background_retry_running = False
-        print("Background retry task stopped")
-    
-    async def delayed_retry():
-        """Delayed retry using asyncio"""
-        try:
-            await asyncio.sleep(ad_retry_delay)
-            load_banner_ad()
-        except Exception as e:
-            print(f"Delayed retry failed: {e}")
-            retry_banner_ad()
-    
-    def retry_banner_ad():
-        """Retry loading banner ad after error"""
-        global ad_retry_count, background_retry_running
-        
-        # Don't retry if ad already loaded successfully
+        # Skip if ad already loaded successfully
         if ad_loaded_successfully:
-            print("Ad already loaded successfully, skipping retry")
             return
         
-        if ad_retry_count >= max_ad_retries:
-            print(f"Fast retries ({max_ad_retries}) completed, starting background retries every {background_retry_delay}s")
-            banner_ad_container.content = create_ad_placeholder("Ad will retry...")
-            page.update()
-            
-            # Start background retry task if not already running
-            if not background_retry_running:
-                page.run_task(background_retry_ad)
-                print("Background retry task scheduled")
-            return
-        
-        ad_retry_count += 1
-        print(f"Fast retry {ad_retry_count}/{max_ad_retries}...")
-        
-        banner_ad_container.content = create_ad_placeholder(f"Retrying {ad_retry_count}/{max_ad_retries}...")
-        page.update()
-        
-        # Schedule delayed retry
-        page.run_task(delayed_retry)
-    
-    def load_banner_ad():
-        """Load banner ad with error handling and retry logic"""
-        global ad_retry_count, ad_loaded_successfully
-        
-        # Don't reload if ad already loaded successfully
-        if ad_loaded_successfully:
-            print("Banner ad already loaded successfully, skipping reload")
-            return
-        
+        # Skip if ads not available or not mobile
         if not ADS_AVAILABLE or not is_mobile:
-            banner_ad_container.content = create_ad_placeholder("Ad Space")
-            page.update()
             return
+        
+        # Mark that we attempted to load
+        ad_load_attempted = True
+        print(f"Attempting to load banner ad... (attempt at {time.time()})")
         
         try:
             def on_ad_load(e):
                 global ad_loaded_successfully
-                print("🎉 BannerAd loaded successfully - will not refresh, background retries stopped")
-                ad_loaded_successfully = True  # Mark as loaded, prevent future reloads
-                ad_retry_count = 0  # Reset retry count on success
-                # Update placeholder to remove retry message
+                print("✅ BannerAd loaded successfully! Will not reload.")
+                ad_loaded_successfully = True
                 try:
                     page.update()
-                except:
-                    pass
+                except Exception as update_error:
+                    print(f"Error updating page after ad load: {update_error}")
             
             def on_ad_error(e):
-                # Only retry if ad hasn't loaded successfully yet
+                global ad_loaded_successfully
                 if not ad_loaded_successfully:
                     error_msg = e.data if hasattr(e, 'data') else str(e)
-                    print(f"BannerAd error: {error_msg}")
-                    retry_banner_ad()
-                else:
-                    print("Ad error occurred but ad already loaded, ignoring")
+                    print(f"❌ BannerAd error: {error_msg}")
+                    print("   Will retry on next user interaction")
+                    
+                    # Update placeholder to inform user
+                    try:
+                        banner_ad_container.content = create_ad_placeholder("Tap anywhere to retry")
+                        page.update()
+                    except Exception as update_error:
+                        print(f"Error updating placeholder: {update_error}")
             
+            # Create new ad instance
             new_ad = fta.BannerAd(
                 unit_id=ad_ids.get(page.platform, {}).get("banner"),
                 on_click=lambda e: print("BannerAd clicked"),
@@ -419,6 +376,7 @@ def main(page: ft.Page):
                 on_will_dismiss=lambda e: print("BannerAd will dismiss"),
             )
             
+            # Update container with new ad
             banner_ad_container.content = ft.Container(
                 width=320,
                 height=50,
@@ -429,13 +387,17 @@ def main(page: ft.Page):
             page.update()
             
         except Exception as e:
-            print(f"Failed to create banner ad: {e}")
+            print(f"Exception creating banner ad: {e}")
             if not ad_loaded_successfully:
-                retry_banner_ad()
+                try:
+                    banner_ad_container.content = create_ad_placeholder("Tap anywhere to retry")
+                    page.update()
+                except Exception as update_error:
+                    print(f"Error updating placeholder after exception: {update_error}")
     
-    # Initialize banner ad
+    # Initial ad load attempt on app start
     if ADS_AVAILABLE and is_mobile:
-        load_banner_ad()
+        try_load_banner_ad()
     
     # Animated decorative elements
     def create_deco_circles():
@@ -473,6 +435,8 @@ def main(page: ft.Page):
     def create_nav_button(icon, label, page_name, is_active=False):
         def on_nav_click(e):
             try:
+                # Try to load ad on every interaction
+                try_load_banner_ad()
                 switch_page(page_name)
             except Exception as ex:
                 print(f"Error in navigation click: {ex}")
@@ -699,6 +663,8 @@ def main(page: ft.Page):
     
     def on_random_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             fetch_quote(get_random_quote)
         except Exception as ex:
             print(f"Error in random click handler: {ex}")
@@ -706,6 +672,8 @@ def main(page: ft.Page):
     
     def on_daily_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             # Check if we already have today's quote cached
             import datetime
             today = datetime.date.today().isoformat()
@@ -722,6 +690,8 @@ def main(page: ft.Page):
     
     def on_copy_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             if not current_quote.get("text"):
                 show_error("No quote to copy")
                 return
@@ -959,6 +929,9 @@ def main(page: ft.Page):
     def create_quote_card(quote_data, index):
         def copy_quote(e):
             try:
+                # Try to load ad on every interaction
+                try_load_banner_ad()
+                
                 quote_text_val = quote_data.get("q", "")
                 author_val = quote_data.get("a", "Unknown")
                 
@@ -1055,6 +1028,9 @@ def main(page: ft.Page):
     
     def load_browse_quotes(append=False):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
+            
             if not append:
                 browse_quotes_list.controls.clear()
                 browse_loading.visible = True
@@ -1086,6 +1062,8 @@ def main(page: ft.Page):
                 # Add "Load More" button
                 def on_load_more(e):
                     try:
+                        # Try to load ad on every interaction
+                        try_load_banner_ad()
                         load_browse_quotes(append=True)
                     except Exception as ex:
                         print(f"Error loading more quotes: {ex}")
@@ -1167,7 +1145,7 @@ def main(page: ft.Page):
                             ft.ElevatedButton(
                                 "Retry",
                                 icon=ft.Icons.REFRESH_ROUNDED,
-                                on_click=lambda e: load_browse_quotes(),
+                                on_click=lambda e: (try_load_banner_ad(), load_browse_quotes()),
                                 bgcolor="#fbbf24",
                                 color="#0f172a",
                             ),
@@ -1356,7 +1334,11 @@ def main(page: ft.Page):
     )
     
     def switch_page(page_name):
+        """Switch between pages with ad retry on every navigation"""
         try:
+            # Try to load ad when switching pages
+            try_load_banner_ad()
+            
             if page_name == "home":
                 page_container.content = home_content
                 update_nav_active("home")
@@ -1415,6 +1397,7 @@ def main(page: ft.Page):
         )
         
         # Load initial quote - prioritize daily quote on app start
+        try_load_banner_ad()  # Try to load ad
         fetch_quote(get_quote_of_day)
     except Exception as e:
         print(f"Critical error initializing app: {e}")

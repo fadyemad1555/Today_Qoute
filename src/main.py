@@ -293,7 +293,7 @@ def main(page: ft.Page):
     # Test ad unit IDs
     ad_ids = {
         ft.PagePlatform.ANDROID: {
-            "banner": "ca-app-pub-3940256099942544/6300978111",
+            "banner": "ca-app-pub-2151970770204836/3024852269",
         },
         ft.PagePlatform.IOS: {
             "banner": "ca-app-pub-3940256099942544/2934735716",
@@ -696,14 +696,20 @@ def main(page: ft.Page):
                 show_error("No quote to copy")
                 return
             
-            full_text = f'{current_quote["text"]}\n— {current_quote.get("author", "Unknown")}'
-            page.set_clipboard(full_text)
+            # Format quote nicely with decorative elements
+            quote_text = current_quote["text"]
+            author = current_quote.get("author", "Unknown")
+            
+            # Create beautiful formatted text
+            formatted_text = f'"{quote_text}"\n\n— {author}'
+            
+            page.set_clipboard(formatted_text)
             
             snackbar = ft.SnackBar(
                 content=ft.Row(
                     [
                         ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=20),
-                        ft.Text("Quote copied!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                        ft.Text("Quote copied beautifully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
                     ],
                     spacing=8
                 ),
@@ -938,14 +944,16 @@ def main(page: ft.Page):
                 if not quote_text_val:
                     return
                 
-                full_text = f'{quote_text_val}\n— {author_val}'
-                page.set_clipboard(full_text)
+                # Format quote nicely with decorative elements
+                formatted_text = f'"{quote_text_val}"\n\n— {author_val}'
+                
+                page.set_clipboard(formatted_text)
                 
                 snackbar = ft.SnackBar(
                     content=ft.Row(
                         [
                             ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=18),
-                            ft.Text("Copied!", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
+                            ft.Text("Copied beautifully!", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
                         ],
                         spacing=8
                     ),

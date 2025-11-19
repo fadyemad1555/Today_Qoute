@@ -1,8 +1,39 @@
+"""
+Quote Explorer - A modern inspirational quotes app built with Flet
+
+Features:
+- Daily featured quotes with smart caching
+- Random inspirational quotes
+- Browse extensive quote collection
+- One-tap clipboard copy
+- Create beautiful quote images with backgrounds
+- Event-driven banner ad loading (no threading/async)
+- Comprehensive offline support
+- Smart error handling and recovery
+
+Banner Ad Logic:
+- Pure event-driven approach (no threads, no async, no timers)
+- Attempts to load on every user interaction
+- Once loaded successfully, never tries again
+- Perfect for offline-to-online transitions
+- Works seamlessly with Flet's architecture
+"""
+
 import flet as ft
 import requests
 import time
 import random
-import asyncio
+import base64
+import io
+import os
+
+# Try to import PIL/Pillow
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
+    print("Pillow not available. Install with: pip install Pillow==10.4.0")
 
 # Try to import ads, but gracefully handle if not available
 try:
@@ -45,6 +76,50 @@ OFFLINE_QUOTES = [
     {"q": "Life is 10% what happens to you and 90% how you react to it.", "a": "Charles R. Swindoll"},
     {"q": "Change your thoughts and you change your world.", "a": "Norman Vincent Peale"},
 ]
+
+# Background themes for quote images
+BACKGROUND_THEMES = {
+    "sunset": {
+        "name": "Sunset",
+        "colors": [(255, 94, 77), (245, 158, 11), (251, 191, 36)],
+        "icon": ft.Icons.WB_SUNNY
+    },
+    "ocean": {
+        "name": "Ocean",
+        "colors": [(14, 165, 233), (56, 189, 248), (125, 211, 252)],
+        "icon": ft.Icons.WATER
+    },
+    "forest": {
+        "name": "Forest",
+        "colors": [(34, 197, 94), (74, 222, 128), (134, 239, 172)],
+        "icon": ft.Icons.FOREST
+    },
+    "night": {
+        "name": "Night Sky",
+        "colors": [(30, 27, 75), (67, 56, 202), (99, 102, 241)],
+        "icon": ft.Icons.NIGHTLIGHT
+    },
+    "autumn": {
+        "name": "Autumn",
+        "colors": [(234, 88, 12), (251, 146, 60), (253, 186, 116)],
+        "icon": ft.Icons.PARK
+    },
+    "lavender": {
+        "name": "Lavender",
+        "colors": [(167, 139, 250), (196, 181, 253), (221, 214, 254)],
+        "icon": ft.Icons.SPA
+    },
+    "space": {
+        "name": "Space",
+        "colors": [(17, 24, 39), (55, 65, 81), (107, 114, 128)],
+        "icon": ft.Icons.ROCKET_LAUNCH
+    },
+    "coral": {
+        "name": "Coral Reef",
+        "colors": [(251, 113, 133), (252, 165, 165), (254, 205, 211)],
+        "icon": ft.Icons.WAVES
+    },
+}
 
 
 def can_make_request():
@@ -91,6 +166,161 @@ def safe_api_request(url, timeout=8):
         return None
     except Exception as e:
         print(f"Unexpected error in API request: {e}")
+        return None
+
+
+def create_quote_image(quote_text, author, theme_key="sunset"):
+    """Create a beautiful quote image with gradient background"""
+    if not PILLOW_AVAILABLE:
+        return None
+    
+    try:
+        # Image dimensions
+        width, height = 1080, 1080
+        
+        # Get theme colors
+        theme = BACKGROUND_THEMES.get(theme_key, BACKGROUND_THEMES["sunset"])
+        colors = theme["colors"]
+        
+        # Create base image
+        img = Image.new('RGB', (width, height))
+        draw = ImageDraw.Draw(img)
+        
+        # Create gradient background
+        for y in range(height):
+            # Calculate color blend based on position
+            ratio = y / height
+            if ratio < 0.5:
+                # Top half: blend color 1 to color 2
+                blend_ratio = ratio * 2
+                r = int(colors[0][0] * (1 - blend_ratio) + colors[1][0] * blend_ratio)
+                g = int(colors[0][1] * (1 - blend_ratio) + colors[1][1] * blend_ratio)
+                b = int(colors[0][2] * (1 - blend_ratio) + colors[1][2] * blend_ratio)
+            else:
+                # Bottom half: blend color 2 to color 3
+                blend_ratio = (ratio - 0.5) * 2
+                r = int(colors[1][0] * (1 - blend_ratio) + colors[2][0] * blend_ratio)
+                g = int(colors[1][1] * (1 - blend_ratio) + colors[2][1] * blend_ratio)
+                b = int(colors[1][2] * (1 - blend_ratio) + colors[2][2] * blend_ratio)
+            
+            draw.line([(0, y), (width, y)], fill=(r, g, b))
+        
+        # Add subtle texture overlay
+        overlay = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        
+        # Add decorative circles
+        for i in range(20):
+            x = random.randint(-100, width + 100)
+            y = random.randint(-100, height + 100)
+            radius = random.randint(50, 200)
+            alpha = random.randint(5, 20)
+            overlay_draw.ellipse(
+                [x - radius, y - radius, x + radius, y + radius],
+                fill=(255, 255, 255, alpha)
+            )
+        
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        
+        # Apply slight blur for smooth look
+        img = img.filter(ImageFilter.GaussianBlur(radius=1))
+        
+        # Draw text
+        draw = ImageDraw.Draw(img)
+        if os.path.isfile("assets/arial.ttf"):
+            font="assets/arial.ttf"
+        elif os.path.isfile("src/assets/arial.ttf"):
+            font="src/assets/arial.ttf"
+        # Try to use a nice font with LARGER sizes
+        try:
+            # Much larger font sizes for better readability
+            quote_font = ImageFont.truetype(font, 56)  # Increased from 56
+            author_font = ImageFont.truetype(font, 40)  # Increased from 40
+        except:
+            try:
+                # Try other common fonts
+                quote_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 56)
+                author_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 52)
+            except:
+                quote_font = ImageFont.load_default()
+                author_font = ImageFont.load_default()
+        
+        # Prepare quote text with quotes
+        formatted_quote = f'"{quote_text}"'
+        
+        # Text wrapping for quote with MORE generous width
+        words = formatted_quote.split()
+        lines = []
+        current_line = []
+        max_width = width - 160  # Reduced padding from 200 for more text space
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            try:
+                bbox = draw.textbbox((0, 0), test_line, font=quote_font)
+                test_width = bbox[2] - bbox[0]
+            except:
+                test_width = len(test_line) * 40
+            
+            if test_width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Calculate total text height with BIGGER line spacing
+        line_height = 95  # Increased from 70
+        total_text_height = len(lines) * line_height + 120 + 70  # quote + space + author
+        
+        # Start position (centered vertically)
+        y_start = (height - total_text_height) // 2
+        
+        # Draw quote text with STRONGER shadow
+        y_pos = y_start
+        for line in lines:
+            try:
+                bbox = draw.textbbox((0, 0), line, font=quote_font)
+                text_width = bbox[2] - bbox[0]
+            except:
+                text_width = len(line) * 40
+            
+            x_pos = (width - text_width) // 2
+            
+            # Stronger shadow for better visibility
+            draw.text((x_pos + 4, y_pos + 4), line, font=quote_font, fill=(0, 0, 0, 150))
+            # Main text
+            draw.text((x_pos, y_pos), line, font=quote_font, fill=(255, 255, 255))
+            y_pos += line_height
+        
+        # Draw author with STRONGER shadow
+        author_text = f"— {author}"
+        try:
+            bbox = draw.textbbox((0, 0), author_text, font=author_font)
+            author_width = bbox[2] - bbox[0]
+        except:
+            author_width = len(author_text) * 30
+        
+        author_x = (width - author_width) // 2
+        author_y = y_pos + 50  # Increased spacing
+        
+        # Stronger shadow
+        draw.text((author_x + 3, author_y + 3), author_text, font=author_font, fill=(0, 0, 0, 150))
+        # Main text
+        draw.text((author_x, author_y), author_text, font=author_font, fill=(255, 255, 255, 240))
+        
+        # Convert to base64 for display
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG", quality=95)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        return img_str
+    
+    except Exception as e:
+        print(f"Error creating quote image: {e}")
         return None
 
 
@@ -260,6 +490,11 @@ def main(page: ft.Page):
     page.padding = 0
     page.bgcolor = "#0a0e1a"
     
+    # Banner ad state management - Define globally at start
+    global ad_loaded_successfully, ad_load_attempted
+    ad_loaded_successfully = False
+    ad_load_attempted = False
+    
     current_quote = {"text": "", "author": "", "source": ""}
     current_page_view = ft.Ref[ft.Container]()
     
@@ -276,14 +511,7 @@ def main(page: ft.Page):
         },
     }
     
-    # Banner ad state management
-    ad_retry_count = 0
-    max_ad_retries = 3  # Fast retries
-    ad_retry_delay = 5  # seconds for fast retries
-    ad_loaded_successfully = False  # Track if ad loaded successfully
-    background_retry_delay = 20  # seconds for background retries
-    background_retry_running = False  # Track if background retry is running
-    
+    # Banner ad state management - Simple event-driven approach
     def create_ad_placeholder(message="Ad Space"):
         """Create a placeholder for banner ad"""
         return ft.Container(
@@ -303,111 +531,51 @@ def main(page: ft.Page):
     
     # Create banner ad container reference
     banner_ad_container = ft.Container(
-        content=create_ad_placeholder("Ad Loading..." if is_mobile and ADS_AVAILABLE else "Ad Space"),
+        content=create_ad_placeholder("Tap to load ad" if is_mobile and ADS_AVAILABLE else "Ad Space"),
         alignment=ft.alignment.center,
     )
     
-    async def background_retry_ad():
-        """Keep retrying ad load in background every 20 seconds until success"""
-        global ad_loaded_successfully, background_retry_running
+    def try_load_banner_ad():
+        """Try to load banner ad on every user interaction - No threading, pure event-driven"""
+        global ad_loaded_successfully, ad_load_attempted
         
-        background_retry_running = True
-        print("Background retry task started")
-        
-        while not ad_loaded_successfully:
-            try:
-                print(f"Background retry: waiting {background_retry_delay}s... (loaded={ad_loaded_successfully})")
-                await asyncio.sleep(background_retry_delay)
-                
-                if not ad_loaded_successfully:
-                    print("Background retry: attempting to load ad...")
-                    try:
-                        load_banner_ad()
-                    except Exception as e:
-                        print(f"Background retry failed: {e}")
-                else:
-                    print("Background retry: ad loaded successfully, stopping background retries")
-                    break
-            except Exception as e:
-                print(f"Error in background retry loop: {e}")
-                await asyncio.sleep(background_retry_delay)
-        
-        background_retry_running = False
-        print("Background retry task stopped")
-    
-    async def delayed_retry():
-        """Delayed retry using asyncio"""
-        try:
-            await asyncio.sleep(ad_retry_delay)
-            load_banner_ad()
-        except Exception as e:
-            print(f"Delayed retry failed: {e}")
-            retry_banner_ad()
-    
-    def retry_banner_ad():
-        """Retry loading banner ad after error"""
-        global ad_retry_count, background_retry_running
-        
-        # Don't retry if ad already loaded successfully
+        # Skip if ad already loaded successfully
         if ad_loaded_successfully:
-            print("Ad already loaded successfully, skipping retry")
             return
         
-        if ad_retry_count >= max_ad_retries:
-            print(f"Fast retries ({max_ad_retries}) completed, starting background retries every {background_retry_delay}s")
-            banner_ad_container.content = create_ad_placeholder("Ad will retry...")
-            page.update()
-            
-            # Start background retry task if not already running
-            if not background_retry_running:
-                page.run_task(background_retry_ad)
-                print("Background retry task scheduled")
-            return
-        
-        ad_retry_count += 1
-        print(f"Fast retry {ad_retry_count}/{max_ad_retries}...")
-        
-        banner_ad_container.content = create_ad_placeholder(f"Retrying {ad_retry_count}/{max_ad_retries}...")
-        page.update()
-        
-        # Schedule delayed retry
-        page.run_task(delayed_retry)
-    
-    def load_banner_ad():
-        """Load banner ad with error handling and retry logic"""
-        global ad_retry_count, ad_loaded_successfully
-        
-        # Don't reload if ad already loaded successfully
-        if ad_loaded_successfully:
-            print("Banner ad already loaded successfully, skipping reload")
-            return
-        
+        # Skip if ads not available or not mobile
         if not ADS_AVAILABLE or not is_mobile:
-            banner_ad_container.content = create_ad_placeholder("Ad Space")
-            page.update()
             return
+        
+        # Mark that we attempted to load
+        ad_load_attempted = True
+        print(f"Attempting to load banner ad... (attempt at {time.time()})")
         
         try:
             def on_ad_load(e):
                 global ad_loaded_successfully
-                print("🎉 BannerAd loaded successfully - will not refresh, background retries stopped")
-                ad_loaded_successfully = True  # Mark as loaded, prevent future reloads
-                ad_retry_count = 0  # Reset retry count on success
-                # Update placeholder to remove retry message
+                print("✅ BannerAd loaded successfully! Will not reload.")
+                ad_loaded_successfully = True
                 try:
                     page.update()
-                except:
-                    pass
+                except Exception as update_error:
+                    print(f"Error updating page after ad load: {update_error}")
             
             def on_ad_error(e):
-                # Only retry if ad hasn't loaded successfully yet
+                global ad_loaded_successfully
                 if not ad_loaded_successfully:
                     error_msg = e.data if hasattr(e, 'data') else str(e)
-                    print(f"BannerAd error: {error_msg}")
-                    retry_banner_ad()
-                else:
-                    print("Ad error occurred but ad already loaded, ignoring")
+                    print(f"❌ BannerAd error: {error_msg}")
+                    print("   Will retry on next user interaction")
+                    
+                    # Update placeholder to inform user
+                    try:
+                        banner_ad_container.content = create_ad_placeholder("Tap anywhere to retry")
+                        page.update()
+                    except Exception as update_error:
+                        print(f"Error updating placeholder: {update_error}")
             
+            # Create new ad instance
             new_ad = fta.BannerAd(
                 unit_id=ad_ids.get(page.platform, {}).get("banner"),
                 on_click=lambda e: print("BannerAd clicked"),
@@ -419,6 +587,7 @@ def main(page: ft.Page):
                 on_will_dismiss=lambda e: print("BannerAd will dismiss"),
             )
             
+            # Update container with new ad
             banner_ad_container.content = ft.Container(
                 width=320,
                 height=50,
@@ -429,13 +598,17 @@ def main(page: ft.Page):
             page.update()
             
         except Exception as e:
-            print(f"Failed to create banner ad: {e}")
+            print(f"Exception creating banner ad: {e}")
             if not ad_loaded_successfully:
-                retry_banner_ad()
+                try:
+                    banner_ad_container.content = create_ad_placeholder("Tap anywhere to retry")
+                    page.update()
+                except Exception as update_error:
+                    print(f"Error updating placeholder after exception: {update_error}")
     
-    # Initialize banner ad
+    # Initial ad load attempt on app start
     if ADS_AVAILABLE and is_mobile:
-        load_banner_ad()
+        try_load_banner_ad()
     
     # Animated decorative elements
     def create_deco_circles():
@@ -473,6 +646,8 @@ def main(page: ft.Page):
     def create_nav_button(icon, label, page_name, is_active=False):
         def on_nav_click(e):
             try:
+                # Try to load ad on every interaction
+                try_load_banner_ad()
                 switch_page(page_name)
             except Exception as ex:
                 print(f"Error in navigation click: {ex}")
@@ -506,11 +681,12 @@ def main(page: ft.Page):
     
     nav_home = create_nav_button(ft.Icons.HOME_ROUNDED, "Home", "home", True)
     nav_browse = create_nav_button(ft.Icons.EXPLORE_ROUNDED, "Browse", "browse", False)
+    nav_create = create_nav_button(ft.Icons.IMAGE_ROUNDED, "Create", "create", False)
     nav_about = create_nav_button(ft.Icons.INFO_ROUNDED, "About", "about", False)
     
     navbar = ft.Container(
         content=ft.Row(
-            [nav_home, nav_browse, nav_about],
+            [nav_home, nav_browse, nav_create, nav_about],
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
             spacing=0
         ),
@@ -527,7 +703,7 @@ def main(page: ft.Page):
     
     def update_nav_active(active_page):
         try:
-            for nav, page_name in [(nav_home, "home"), (nav_browse, "browse"), (nav_about, "about")]:
+            for nav, page_name in [(nav_home, "home"), (nav_browse, "browse"), (nav_create, "create"), (nav_about, "about")]:
                 is_active = page_name == active_page
                 nav.bgcolor = ft.Colors.with_opacity(0.1, "#fbbf24") if is_active else None
                 nav.content.controls[0].color = "#fbbf24" if is_active else "#64748b"
@@ -699,6 +875,8 @@ def main(page: ft.Page):
     
     def on_random_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             fetch_quote(get_random_quote)
         except Exception as ex:
             print(f"Error in random click handler: {ex}")
@@ -706,6 +884,8 @@ def main(page: ft.Page):
     
     def on_daily_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             # Check if we already have today's quote cached
             import datetime
             today = datetime.date.today().isoformat()
@@ -722,6 +902,8 @@ def main(page: ft.Page):
     
     def on_copy_click(e):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
             if not current_quote.get("text"):
                 show_error("No quote to copy")
                 return
@@ -774,9 +956,9 @@ def main(page: ft.Page):
     
     quote_container = ft.Container(
         content=quote_content,
-        border_radius=24,
+        border_radius=20,
         bgcolor=ft.Colors.with_opacity(0.9, "#1e293b"),
-        padding=40,
+        padding=30,
         gradient=ft.LinearGradient(
             begin=ft.alignment.top_left,
             end=ft.alignment.bottom_right,
@@ -793,7 +975,7 @@ def main(page: ft.Page):
             offset=ft.Offset(0, 15)
         ),
         blur=ft.Blur(10, 10, ft.BlurTileMode.CLAMP),
-        height=340,
+        height=300,
     )
     
     # Action buttons with visual indicators
@@ -805,7 +987,7 @@ def main(page: ft.Page):
                         ft.Icon(
                             icon,
                             color="#0f172a" if is_primary else "#fbbf24",
-                            size=24
+                            size=22
                         ),
                         # Badge indicator
                         ft.Container(
@@ -823,26 +1005,26 @@ def main(page: ft.Page):
                             visible=badge_text is not None
                         ) if badge_text else ft.Container(),
                     ],
-                    width=24,
-                    height=24,
+                    width=22,
+                    height=22,
                 ),
                 ft.Text(
                     label,
-                    size=11,
+                    size=10,
                     color="#0f172a" if is_primary else "#fbbf24",
                     weight=ft.FontWeight.BOLD
                 )
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=6
+            spacing=5
         )
         
         return ft.Container(
             content=button_content,
             bgcolor="#fbbf24" if is_primary else ft.Colors.with_opacity(0.05, "#1e293b"),
             border=None if is_primary else ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
-            border_radius=14,
-            padding=16,
+            border_radius=12,
+            padding=12,
             ink=True,
             on_click=on_click,
             expand=True,
@@ -867,7 +1049,7 @@ def main(page: ft.Page):
     
     buttons_row = ft.Row(
         [button_random, button_daily, button_copy],
-        spacing=10,
+        spacing=8,
         alignment=ft.MainAxisAlignment.CENTER
     )
     
@@ -877,7 +1059,7 @@ def main(page: ft.Page):
             [
                 ft.Text(
                     "Quote Explorer",
-                    size=38,
+                    size=32,
                     weight=ft.FontWeight.BOLD,
                     color="#f8fafc",
                     text_align=ft.TextAlign.CENTER,
@@ -885,7 +1067,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Text(
                         "Daily inspiration at your fingertips",
-                        size=13,
+                        size=12,
                         color="#64748b",
                         text_align=ft.TextAlign.CENTER,
                         weight=ft.FontWeight.W_500
@@ -896,7 +1078,7 @@ def main(page: ft.Page):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=4
         ),
-        padding=ft.padding.only(top=30, bottom=20, left=30, right=30)
+        padding=ft.padding.only(top=20, bottom=15, left=30, right=30)
     )
     
     # Home page content
@@ -965,6 +1147,9 @@ def main(page: ft.Page):
     def create_quote_card(quote_data, index):
         def copy_quote(e):
             try:
+                # Try to load ad on every interaction
+                try_load_banner_ad()
+                
                 quote_text_val = quote_data.get("q", "")
                 author_val = quote_data.get("a", "Unknown")
                 
@@ -994,6 +1179,44 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"Error copying quote from card: {ex}")
         
+        def create_image_from_card(e):
+            try:
+                # Try to load ad on every interaction
+                try_load_banner_ad()
+                
+                quote_text_val = quote_data.get("q", "")
+                author_val = quote_data.get("a", "Unknown")
+                
+                if not quote_text_val:
+                    return
+                
+                # Update current quote and switch to create page
+                current_quote["text"] = quote_text_val
+                current_quote["author"] = author_val
+                current_quote["source"] = "Browse Quote"
+                
+                # Switch to create page
+                switch_page("create")
+                
+                # Show success message
+                snackbar = ft.SnackBar(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.IMAGE_ROUNDED, color="#10b981", size=18),
+                            ft.Text("Ready to create image!", color="#fbbf24", size=13, weight=ft.FontWeight.W_500)
+                        ],
+                        spacing=8
+                    ),
+                    bgcolor="#1e293b",
+                    duration=2000,
+                    behavior=ft.SnackBarBehavior.FLOATING,
+                )
+                page.overlay.append(snackbar)
+                snackbar.open = True
+                page.update()
+            except Exception as ex:
+                print(f"Error creating image from card: {ex}")
+        
         # Alternate colors for variety
         colors = [
             ("#fbbf24", "#fef3c7"),  # amber
@@ -1019,12 +1242,24 @@ def main(page: ft.Page):
                                 opacity=0.7
                             ),
                             ft.Container(expand=True),
-                            ft.IconButton(
-                                icon=ft.Icons.CONTENT_COPY,
-                                icon_size=18,
-                                icon_color=ft.Colors.with_opacity(0.6, "#94a3b8"),
-                                on_click=copy_quote,
-                                tooltip="Copy quote"
+                            ft.Row(
+                                [
+                                    ft.IconButton(
+                                        icon=ft.Icons.IMAGE_ROUNDED,
+                                        icon_size=18,
+                                        icon_color=ft.Colors.with_opacity(0.7, primary_color),
+                                        on_click=create_image_from_card,
+                                        tooltip="Create image"
+                                    ),
+                                    ft.IconButton(
+                                        icon=ft.Icons.CONTENT_COPY,
+                                        icon_size=18,
+                                        icon_color=ft.Colors.with_opacity(0.6, "#94a3b8"),
+                                        on_click=copy_quote,
+                                        tooltip="Copy quote"
+                                    ),
+                                ],
+                                spacing=0
                             )
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -1063,6 +1298,9 @@ def main(page: ft.Page):
     
     def load_browse_quotes(append=False):
         try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
+            
             if not append:
                 browse_quotes_list.controls.clear()
                 browse_loading.visible = True
@@ -1094,6 +1332,8 @@ def main(page: ft.Page):
                 # Add "Load More" button
                 def on_load_more(e):
                     try:
+                        # Try to load ad on every interaction
+                        try_load_banner_ad()
                         load_browse_quotes(append=True)
                     except Exception as ex:
                         print(f"Error loading more quotes: {ex}")
@@ -1175,7 +1415,7 @@ def main(page: ft.Page):
                             ft.ElevatedButton(
                                 "Retry",
                                 icon=ft.Icons.REFRESH_ROUNDED,
-                                on_click=lambda e: load_browse_quotes(),
+                                on_click=lambda e: (try_load_banner_ad(), load_browse_quotes()),
                                 bgcolor="#fbbf24",
                                 color="#0f172a",
                             ),
@@ -1232,6 +1472,267 @@ def main(page: ft.Page):
         expand=True,
     )
     
+    # Create Image Page
+    selected_theme = ft.Ref[ft.Text]()
+    current_theme_key = "sunset"
+    preview_image = ft.Ref[ft.Image]()
+    create_loading = ft.Ref[ft.Container]()
+    
+    def on_theme_select(theme_key):
+        def handler(e):
+            nonlocal current_theme_key
+            try:
+                try_load_banner_ad()
+                current_theme_key = theme_key
+                selected_theme.current.value = BACKGROUND_THEMES[theme_key]["name"]
+                page.update()
+                
+                # Generate preview
+                if current_quote.get("text"):
+                    generate_preview()
+            except Exception as ex:
+                print(f"Error selecting theme: {ex}")
+        return handler
+    
+    def generate_preview():
+        try:
+            if not PILLOW_AVAILABLE:
+                show_error("Pillow library not available")
+                return
+            
+            if not current_quote.get("text"):
+                show_error("No quote available")
+                return
+            
+            create_loading.current.visible = True
+            page.update()
+            
+            # Generate image
+            img_base64 = create_quote_image(
+                current_quote["text"],
+                current_quote.get("author", "Unknown"),
+                current_theme_key
+            )
+            
+            create_loading.current.visible = False
+            
+            if img_base64:
+                preview_image.current.src_base64 = img_base64
+                preview_image.current.visible = True
+            else:
+                show_error("Failed to generate image")
+            
+            page.update()
+        except Exception as e:
+            print(f"Error generating preview: {e}")
+            create_loading.current.visible = False
+            show_error("Error generating image")
+            page.update()
+    
+    def on_generate_click(e):
+        try:
+            try_load_banner_ad()
+            generate_preview()
+        except Exception as ex:
+            print(f"Error in generate click: {ex}")
+    
+    # Theme selection buttons
+    theme_buttons = []
+    for theme_key, theme_data in BACKGROUND_THEMES.items():
+        theme_btn = ft.Container(
+            content=ft.Column(
+                [
+                    ft.Icon(theme_data["icon"], size=24, color="#fbbf24"),
+                    ft.Text(
+                        theme_data["name"],
+                        size=10,
+                        color="#f8fafc",
+                        weight=ft.FontWeight.W_500,
+                        text_align=ft.TextAlign.CENTER,
+                    )
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=4
+            ),
+            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+            border=ft.border.all(1.5, ft.Colors.with_opacity(0.3, "#fbbf24")),
+            border_radius=12,
+            padding=12,
+            ink=True,
+            on_click=on_theme_select(theme_key),
+            width=80,
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+        )
+        theme_buttons.append(theme_btn)
+    
+    create_header = ft.Container(
+        content=ft.Column(
+            [
+                ft.Text(
+                    "Create Image",
+                    size=28,
+                    weight=ft.FontWeight.BOLD,
+                    color="#f8fafc",
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Text(
+                    "Transform quotes into beautiful images",
+                    size=12,
+                    color="#64748b",
+                    text_align=ft.TextAlign.CENTER,
+                    weight=ft.FontWeight.W_500
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=4
+        ),
+        padding=ft.padding.only(top=20, bottom=15, left=30, right=30)
+    )
+    
+    selected_theme_text = ft.Text(
+        ref=selected_theme,
+        value="Sunset",
+        size=14,
+        color="#fbbf24",
+        weight=ft.FontWeight.BOLD,
+        text_align=ft.TextAlign.CENTER,
+    )
+    
+    create_content = ft.Column(
+        [
+            create_header,
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Select Background Theme",
+                            size=13,
+                            color="#94a3b8",
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                        ft.Container(height=8),
+                        ft.Row(
+                            theme_buttons[:4],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=8,
+                        ),
+                        ft.Container(height=8),
+                        ft.Row(
+                            theme_buttons[4:],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=8,
+                        ),
+                        ft.Container(height=12),
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.PALETTE, size=16, color="#fbbf24"),
+                                    ft.Text("Selected: ", size=12, color="#94a3b8"),
+                                    selected_theme_text,
+                                ],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=4
+                            ),
+                            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+                            border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
+                            border_radius=10,
+                            padding=10,
+                        ),
+                    ],
+                    spacing=0
+                ),
+                padding=ft.padding.symmetric(horizontal=30)
+            ),
+            ft.Container(height=16),
+            ft.Container(
+                content=ft.ElevatedButton(
+                    "Generate Image",
+                    icon=ft.Icons.AUTO_AWESOME,
+                    on_click=on_generate_click,
+                    bgcolor="#fbbf24",
+                    color="#0f172a",
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=12),
+                        padding=ft.padding.symmetric(horizontal=32, vertical=16),
+                    ),
+                ),
+                alignment=ft.alignment.center,
+            ),
+            ft.Container(
+                content=ft.Stack(
+                    [
+                        ft.Container(
+                            content=ft.Image(
+                                ref=preview_image,
+                                visible=False,
+                                width=300,
+                                height=300,
+                                fit=ft.ImageFit.CONTAIN,
+                                border_radius=16,
+                            ),
+                            alignment=ft.alignment.center,
+                        ),
+                        ft.Container(
+                            ref=create_loading,
+                            content=ft.Column(
+                                [
+                                    ft.ProgressRing(color="#fbbf24", width=40, height=40, stroke_width=3),
+                                    ft.Container(height=12),
+                                    ft.Text(
+                                        "Creating masterpiece...",
+                                        size=12,
+                                        color="#64748b",
+                                        weight=ft.FontWeight.W_500
+                                    )
+                                ],
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                spacing=0
+                            ),
+                            visible=False,
+                            alignment=ft.alignment.center,
+                        ),
+                    ],
+                ),
+                padding=ft.padding.symmetric(horizontal=30),
+                expand=True,
+            ),
+            
+            # <<< هنا كان الخطأ وتم إصلاحه >>>
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(ft.Icons.INFO_OUTLINE, color="#fb923c", size=32),
+                        ft.Container(height=8),
+                        ft.Text(
+                            "Image creation requires Pillow",
+                            size=13,
+                            color="#f8fafc",
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Container(height=4),
+                        ft.Text(
+                            "Install: pip install Pillow==10.4.0",
+                            size=11,
+                            color="#94a3b8",
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=20,
+                bgcolor=ft.Colors.with_opacity(0.1, "#fb923c"),
+                border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fb923c")),
+                border_radius=12,
+                margin=ft.margin.symmetric(horizontal=30),
+            ) if not PILLOW_AVAILABLE else ft.Container(),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        spacing=0,
+        scroll=ft.ScrollMode.ADAPTIVE,
+        expand=True,
+    )
+
     # About page content
     about_content = ft.Column(
         [
@@ -1254,7 +1755,7 @@ def main(page: ft.Page):
                             text_align=ft.TextAlign.CENTER,
                         ),
                         ft.Text(
-                            "Version 2.1",
+                            "Version 3.0",
                             size=13,
                             color="#64748b",
                             text_align=ft.TextAlign.CENTER,
@@ -1297,6 +1798,8 @@ def main(page: ft.Page):
                                     ft.Text("• Random inspirational quotes", size=13, color="#94a3b8"),
                                     ft.Text("• Daily featured quote", size=13, color="#94a3b8"),
                                     ft.Text("• Browse extensive collection", size=13, color="#94a3b8"),
+                                    ft.Text("• Create beautiful quote images", size=13, color="#94a3b8"),
+                                    ft.Text("• 8 stunning background themes", size=13, color="#94a3b8"),
                                     ft.Text("• One-tap copy to clipboard", size=13, color="#94a3b8"),
                                     ft.Text("• Beautiful modern interface", size=13, color="#94a3b8"),
                                     ft.Text("• Offline quote support", size=13, color="#94a3b8"),
@@ -1364,7 +1867,11 @@ def main(page: ft.Page):
     )
     
     def switch_page(page_name):
+        """Switch between pages with ad retry on every navigation"""
         try:
+            # Try to load ad when switching pages
+            try_load_banner_ad()
+            
             if page_name == "home":
                 page_container.content = home_content
                 update_nav_active("home")
@@ -1372,6 +1879,9 @@ def main(page: ft.Page):
                 page_container.content = browse_content
                 update_nav_active("browse")
                 load_browse_quotes()
+            elif page_name == "create":
+                page_container.content = create_content
+                update_nav_active("create")
             elif page_name == "about":
                 page_container.content = about_content
                 update_nav_active("about")
@@ -1423,6 +1933,7 @@ def main(page: ft.Page):
         )
         
         # Load initial quote - prioritize daily quote on app start
+        try_load_banner_ad()  # Try to load ad
         fetch_quote(get_quote_of_day)
     except Exception as e:
         print(f"Critical error initializing app: {e}")

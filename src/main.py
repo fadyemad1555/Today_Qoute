@@ -269,7 +269,7 @@ def main(page: ft.Page):
     # Test ad unit IDs
     ad_ids = {
         ft.PagePlatform.ANDROID: {
-            "banner": "ca-app-pub-2151970770204836/3024852269",
+            "banner": "ca-app-pub-3940256099942544/6300978111",
         },
         ft.PagePlatform.IOS: {
             "banner": "ca-app-pub-3940256099942544/2934735716",

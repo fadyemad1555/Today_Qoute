@@ -19,7 +19,7 @@ import time
 import random
 import base64
 import io
-
+import os
 # Try to import PIL/Pillow
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -223,7 +223,9 @@ def create_quote_image(quote_text, author, theme_key="sunset"):
 
     # ---- النص ----
     draw = ImageDraw.Draw(img)
-
+    font="src/assets/arial.ttf"
+    if not os.path.isfile(font):
+        font="assets/arial.ttf"
     try:
         quote_font = ImageFont.truetype("src/assets/arial.ttf", 72)
         author_font = ImageFont.truetype("src/assets/arial.ttf", 52)
@@ -744,10 +746,9 @@ def main(page: ft.Page):
                 ft.Icon(ft.Icons.ERROR_OUTLINE_ROUNDED, color="#fb923c", size=18),
                 ft.Text(
                     value="",
-                    size=12,
                     color="#fcd34d",
                     expand=True,
-                    text_align=ft.TextAlign.CENTER,
+                    text_align=ft.TextAlign.LEFT,
                     weight=ft.FontWeight.W_500
                 )
             ],
@@ -757,25 +758,23 @@ def main(page: ft.Page):
         bgcolor=ft.Colors.with_opacity(0.1, "#fb923c"),
         border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fb923c")),
         padding=14,
-        border_radius=12,
-        visible=False
+        expand=True
     )
     
     def show_error(message):
         try:
             if error_container and error_container.content:
                 error_container.content.controls[1].value = message
-                # error_container.visble=True
-                error_container.visible = True
-                dlg = ft.AlertDialog(
-                    title=ft.Text("ERROR"),
-                    surface_tint_color=ft.Colors.RED,
+                error_container.visible=True
+                snack_error = ft.SnackBar(
                     content=error_container,
-                    alignment=ft.alignment.center,
-                    on_dismiss=lambda e: print("Dialog dismissed!"),
-                    # title_padding=ft.padding.all(25),
+                    bgcolor=ft.Colors.BLACK,            # بدون خلفية
+                    shape=None,              # بدون شكل
+                    elevation=0,             # بدون ظل
+                    margin=0,
+                    padding=0,
                 )
-                page.open(dlg)
+                page.open(snack_error)
                 page.update()
         except Exception as e:
             print(f"Error showing error message: {e}")
@@ -1538,7 +1537,7 @@ def main(page: ft.Page):
                 if download_button_ref.current:
                     download_button_ref.current.visible = True
             else:
-                show_error("Failed to generate image\n make sure you are online")
+                show_error("Failed to generate image, make sure you are online.")
             
             page.update()
         except Exception as e:
@@ -2200,4 +2199,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main,assets_dir="asstes")

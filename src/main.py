@@ -227,8 +227,8 @@ def create_quote_image(quote_text, author, theme_key="sunset"):
     if not os.path.isfile(font):
         font="assets/arial.ttf"
     try:
-        quote_font = ImageFont.truetype("src/assets/arial.ttf", 72)
-        author_font = ImageFont.truetype("src/assets/arial.ttf", 52)
+        quote_font = ImageFont.truetype(font, 72)
+        author_font = ImageFont.truetype(font, 52)
     except:
         quote_font = ImageFont.load_default()
         author_font = ImageFont.load_default()

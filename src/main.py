@@ -175,15 +175,16 @@ def get_random_background():
     """تحميل صورة عشوائية بدون API"""
     try:
         # قائمة IDs من Picsum مناسبة للخلفيات مع اقتباسات
-        picsum_ids = [12,13,14,15,16,17,43,58,74,76,88,89,92,93]
+        picsum_ids = [12,13,14,15,16,17,43,58,74,76,88,89,92,93,1036,1037]
         chosen_id = random.choice(picsum_ids)
 
         url = f"https://picsum.photos/id/{chosen_id}/1080/1080?blur"
         headers = {"User-Agent": "Mozilla/5.0"}
-        with requests.get(url, headers=headers, timeout=10) as resp:
-            resp.raise_for_status()
-            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
-            return img
+        resp=requests.get(url, headers=headers, timeout=10)
+        print(resp)
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+        return img
 
     except Exception as e:
         print("فشل تحميل صورة خلفية عشوائية:", e)
@@ -768,6 +769,7 @@ def main(page: ft.Page):
                 error_container.visible = True
                 dlg = ft.AlertDialog(
                     title=ft.Text("ERROR"),
+                    surface_tint_color=ft.Colors.RED,
                     content=error_container,
                     alignment=ft.alignment.center,
                     on_dismiss=lambda e: print("Dialog dismissed!"),
@@ -1536,7 +1538,7 @@ def main(page: ft.Page):
                 if download_button_ref.current:
                     download_button_ref.current.visible = True
             else:
-                show_error("Failed to generate image")
+                show_error("Failed to generate image\n make sure you are online")
             
             page.update()
         except Exception as e:

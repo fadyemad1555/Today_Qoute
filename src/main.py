@@ -7,16 +7,10 @@ Features:
 - Browse extensive quote collection
 - One-tap clipboard copy
 - Create beautiful quote images with backgrounds
+- Download generated images
 - Event-driven banner ad loading (no threading/async)
 - Comprehensive offline support
 - Smart error handling and recovery
-
-Banner Ad Logic:
-- Pure event-driven approach (no threads, no async, no timers)
-- Attempts to load on every user interaction
-- Once loaded successfully, never tries again
-- Perfect for offline-to-online transitions
-- Works seamlessly with Flet's architecture
 """
 
 import flet as ft
@@ -25,7 +19,6 @@ import time
 import random
 import base64
 import io
-import os
 
 # Try to import PIL/Pillow
 try:
@@ -119,6 +112,12 @@ BACKGROUND_THEMES = {
         "colors": [(251, 113, 133), (252, 165, 165), (254, 205, 211)],
         "icon": ft.Icons.WAVES
     },
+    "random": {
+        "name": "random",
+        "colors": [(251, 113, 133), (252, 165, 165), (254, 205, 211)],
+        "icon": ft.Icons.ROCKET
+    },
+    
 }
 
 
@@ -168,160 +167,104 @@ def safe_api_request(url, timeout=8):
         print(f"Unexpected error in API request: {e}")
         return None
 
+import requests
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import random, io, base64
+
+def get_random_background():
+    """تحميل صورة عشوائية بدون API"""
+    try:
+        # قائمة IDs من Picsum مناسبة للخلفيات مع اقتباسات
+        picsum_ids = [12,13,14,15,16,17,43,58,74,76,88,89,92,93]
+        chosen_id = random.choice(picsum_ids)
+
+        url = f"https://picsum.photos/id/{chosen_id}/1080/1080?blur"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        with requests.get(url, headers=headers, timeout=10) as resp:
+            resp.raise_for_status()
+            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            return img
+
+    except Exception as e:
+        print("فشل تحميل صورة خلفية عشوائية:", e)
+        return None
 
 def create_quote_image(quote_text, author, theme_key="sunset"):
-    """Create a beautiful quote image with gradient background"""
-    if not PILLOW_AVAILABLE:
-        return None
-    
-    try:
-        # Image dimensions
-        width, height = 1080, 1080
-        
-        # Get theme colors
-        theme = BACKGROUND_THEMES.get(theme_key, BACKGROUND_THEMES["sunset"])
-        colors = theme["colors"]
-        
-        # Create base image
+    width, height = 1080, 1080
+
+    # إذا Random → استخدم صورة خلفية من الإنترنت
+    if theme_key.lower() == "random":
+        img = get_random_background()
+        if img is None:
+            return None
+    else:
+        # خلفيات gradient القديمة
         img = Image.new('RGB', (width, height))
         draw = ImageDraw.Draw(img)
-        
-        # Create gradient background
+
+        theme = BACKGROUND_THEMES.get(theme_key, BACKGROUND_THEMES["sunset"])
+        colors = theme["colors"]
+
         for y in range(height):
-            # Calculate color blend based on position
             ratio = y / height
             if ratio < 0.5:
-                # Top half: blend color 1 to color 2
-                blend_ratio = ratio * 2
-                r = int(colors[0][0] * (1 - blend_ratio) + colors[1][0] * blend_ratio)
-                g = int(colors[0][1] * (1 - blend_ratio) + colors[1][1] * blend_ratio)
-                b = int(colors[0][2] * (1 - blend_ratio) + colors[1][2] * blend_ratio)
+                blend = ratio * 2
+                r = int(colors[0][0] * (1 - blend) + colors[1][0] * blend)
+                g = int(colors[0][1] * (1 - blend) + colors[1][1] * blend)
+                b = int(colors[0][2] * (1 - blend) + colors[1][2] * blend)
             else:
-                # Bottom half: blend color 2 to color 3
-                blend_ratio = (ratio - 0.5) * 2
-                r = int(colors[1][0] * (1 - blend_ratio) + colors[2][0] * blend_ratio)
-                g = int(colors[1][1] * (1 - blend_ratio) + colors[2][1] * blend_ratio)
-                b = int(colors[1][2] * (1 - blend_ratio) + colors[2][2] * blend_ratio)
-            
+                blend = (ratio - 0.5) * 2
+                r = int(colors[1][0] * (1 - blend) + colors[2][0] * blend)
+                g = int(colors[1][1] * (1 - blend) + colors[2][1] * blend)
+                b = int(colors[1][2] * (1 - blend) + colors[2][2] * blend)
+
             draw.line([(0, y), (width, y)], fill=(r, g, b))
-        
-        # Add subtle texture overlay
-        overlay = Image.new('RGBA', (width, height), (255, 255, 255, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        
-        # Add decorative circles
-        for i in range(20):
-            x = random.randint(-100, width + 100)
-            y = random.randint(-100, height + 100)
-            radius = random.randint(50, 200)
-            alpha = random.randint(5, 20)
-            overlay_draw.ellipse(
-                [x - radius, y - radius, x + radius, y + radius],
-                fill=(255, 255, 255, alpha)
-            )
-        
-        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
-        
-        # Apply slight blur for smooth look
-        img = img.filter(ImageFilter.GaussianBlur(radius=1))
-        
-        # Draw text
-        draw = ImageDraw.Draw(img)
-        if os.path.isfile("assets/arial.ttf"):
-            font="assets/arial.ttf"
-        elif os.path.isfile("src/assets/arial.ttf"):
-            font="src/assets/arial.ttf"
-        # Try to use a nice font with LARGER sizes
-        try:
-            # Much larger font sizes for better readability
-            quote_font = ImageFont.truetype(font, 56)  # Increased from 56
-            author_font = ImageFont.truetype(font, 40)  # Increased from 40
-        except:
-            try:
-                # Try other common fonts
-                quote_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 56)
-                author_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 52)
-            except:
-                quote_font = ImageFont.load_default()
-                author_font = ImageFont.load_default()
-        
-        # Prepare quote text with quotes
-        formatted_quote = f'"{quote_text}"'
-        
-        # Text wrapping for quote with MORE generous width
-        words = formatted_quote.split()
-        lines = []
-        current_line = []
-        max_width = width - 160  # Reduced padding from 200 for more text space
-        
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            try:
-                bbox = draw.textbbox((0, 0), test_line, font=quote_font)
-                test_width = bbox[2] - bbox[0]
-            except:
-                test_width = len(test_line) * 40
-            
-            if test_width <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-        
-        if current_line:
+
+    # ---- النص ----
+    draw = ImageDraw.Draw(img)
+
+    try:
+        quote_font = ImageFont.truetype("src/assets/arial.ttf", 72)
+        author_font = ImageFont.truetype("src/assets/arial.ttf", 52)
+    except:
+        quote_font = ImageFont.load_default()
+        author_font = ImageFont.load_default()
+
+    formatted_quote = f'"{quote_text}"'
+    words = formatted_quote.split()
+    lines, current_line = [], []
+    max_width = width - 160
+
+    for word in words:
+        test = ' '.join(current_line + [word])
+        w = draw.textbbox((0, 0), test, font=quote_font)[2]
+        if w <= max_width:
+            current_line.append(word)
+        else:
             lines.append(' '.join(current_line))
-        
-        # Calculate total text height with BIGGER line spacing
-        line_height = 95  # Increased from 70
-        total_text_height = len(lines) * line_height + 120 + 70  # quote + space + author
-        
-        # Start position (centered vertically)
-        y_start = (height - total_text_height) // 2
-        
-        # Draw quote text with STRONGER shadow
-        y_pos = y_start
-        for line in lines:
-            try:
-                bbox = draw.textbbox((0, 0), line, font=quote_font)
-                text_width = bbox[2] - bbox[0]
-            except:
-                text_width = len(line) * 40
-            
-            x_pos = (width - text_width) // 2
-            
-            # Stronger shadow for better visibility
-            draw.text((x_pos + 4, y_pos + 4), line, font=quote_font, fill=(0, 0, 0, 150))
-            # Main text
-            draw.text((x_pos, y_pos), line, font=quote_font, fill=(255, 255, 255))
-            y_pos += line_height
-        
-        # Draw author with STRONGER shadow
-        author_text = f"— {author}"
-        try:
-            bbox = draw.textbbox((0, 0), author_text, font=author_font)
-            author_width = bbox[2] - bbox[0]
-        except:
-            author_width = len(author_text) * 30
-        
-        author_x = (width - author_width) // 2
-        author_y = y_pos + 50  # Increased spacing
-        
-        # Stronger shadow
-        draw.text((author_x + 3, author_y + 3), author_text, font=author_font, fill=(0, 0, 0, 150))
-        # Main text
-        draw.text((author_x, author_y), author_text, font=author_font, fill=(255, 255, 255, 240))
-        
-        # Convert to base64 for display
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG", quality=95)
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        
-        return img_str
-    
-    except Exception as e:
-        print(f"Error creating quote image: {e}")
-        return None
+            current_line = [word]
+    if current_line:
+        lines.append(' '.join(current_line))
+
+    y = (height - (len(lines) * 95 + 200)) // 2
+
+    for line in lines:
+        w = draw.textbbox((0, 0), line, font=quote_font)[2]
+        x = (width - w) // 2
+        draw.text((x+3, y+3), line, font=quote_font, fill=(0,0,0))
+        draw.text((x, y), line, font=quote_font, fill=(255,255,255))
+        y += 95
+
+    author_text = f"— {author}"
+    w = draw.textbbox((0, 0), author_text, font=author_font)[2]
+    x = (width - w) // 2
+    draw.text((x+3, y+3), author_text, font=author_font, fill=(0,0,0))
+    draw.text((x, y), author_text, font=author_font, fill=(255,255,255))
+
+    # Base64 output
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
 
 
 def get_random_quote():
@@ -659,24 +602,24 @@ def main(page: ft.Page):
                     ft.Icon(
                         icon,
                         color="#fbbf24" if is_active else "#64748b",
-                        size=22
+                        size=24
                     ),
                     ft.Text(
                         label,
-                        size=10,
+                        size=11,
                         color="#fbbf24" if is_active else "#64748b",
                         weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.W_500
                     )
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4
+                spacing=5
             ),
-            padding=ft.padding.symmetric(horizontal=16, vertical=10),
+            padding=ft.padding.symmetric(horizontal=16, vertical=12),
             ink=True,
             on_click=on_nav_click,
-            border_radius=12,
-            bgcolor=ft.Colors.with_opacity(0.1, "#fbbf24") if is_active else None,
-            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+            border_radius=14,
+            bgcolor=ft.Colors.with_opacity(0.15, "#fbbf24") if is_active else None,
+            animate=ft.Animation(250, ft.AnimationCurve.EASE_OUT),
         )
     
     nav_home = create_nav_button(ft.Icons.HOME_ROUNDED, "Home", "home", True)
@@ -690,14 +633,14 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
             spacing=0
         ),
-        bgcolor=ft.Colors.with_opacity(0.95, "#1e293b"),
-        padding=ft.padding.symmetric(vertical=8, horizontal=20),
-        border=ft.border.only(top=ft.BorderSide(1, ft.Colors.with_opacity(0.2, "#475569"))),
+        bgcolor=ft.Colors.with_opacity(0.98, "#1e293b"),
+        padding=ft.padding.symmetric(vertical=10, horizontal=20),
+        border=ft.border.only(top=ft.BorderSide(1.5, ft.Colors.with_opacity(0.3, "#475569"))),
         shadow=ft.BoxShadow(
             spread_radius=0,
-            blur_radius=20,
-            color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
-            offset=ft.Offset(0, -5)
+            blur_radius=30,
+            color=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+            offset=ft.Offset(0, -8)
         ),
     )
     
@@ -723,9 +666,9 @@ def main(page: ft.Page):
     
     quote_text = ft.Text(
         value="",
-        size=17,
+        size=18,
         color="#f8fafc",
-        weight=ft.FontWeight.W_500,
+        weight=ft.FontWeight.W_600,
         text_align=ft.TextAlign.CENTER,
         selectable=True,
         max_lines=None,
@@ -733,33 +676,39 @@ def main(page: ft.Page):
     
     author_text = ft.Text(
         value="",
-        size=12,
+        size=14,
         color="#94a3b8",
         italic=True,
         text_align=ft.TextAlign.CENTER,
         selectable=True,
-        weight=ft.FontWeight.W_500
+        weight=ft.FontWeight.W_600
     )
     
     source_badge = ft.Container(
         content=ft.Row(
             [
-                ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=14, color="#fbbf24"),
+                ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=16, color="#fbbf24"),
                 ft.Text(
                     value="",
-                    size=11,
+                    size=12,
                     color="#cbd5e1",
                     weight=ft.FontWeight.W_600,
                     text_align=ft.TextAlign.CENTER,
                 )
             ],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=6
+            spacing=8
         ),
         bgcolor="#1e293b",
-        padding=ft.padding.symmetric(horizontal=16, vertical=7),
-        border_radius=25,
-        border=ft.border.all(1, "#334155"),
+        padding=ft.padding.symmetric(horizontal=18, vertical=8),
+        border_radius=30,
+        border=ft.border.all(1.5, "#334155"),
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=10,
+            color=ft.Colors.with_opacity(0.3, "#fbbf24"),
+            offset=ft.Offset(0, 4)
+        ),
         visible=False
     )
     
@@ -815,7 +764,16 @@ def main(page: ft.Page):
         try:
             if error_container and error_container.content:
                 error_container.content.controls[1].value = message
+                # error_container.visble=True
                 error_container.visible = True
+                dlg = ft.AlertDialog(
+                    title=ft.Text("ERROR"),
+                    content=error_container,
+                    alignment=ft.alignment.center,
+                    on_dismiss=lambda e: print("Dialog dismissed!"),
+                    # title_padding=ft.padding.all(25),
+                )
+                page.open(dlg)
                 page.update()
         except Exception as e:
             print(f"Error showing error message: {e}")
@@ -909,11 +867,11 @@ def main(page: ft.Page):
                 return
             
             # Format quote nicely with decorative elements
-            quote_text = current_quote["text"]
+            quote_text_val = current_quote["text"]
             author = current_quote.get("author", "Unknown")
             
             # Create beautiful formatted text
-            formatted_text = f'"{quote_text}"\n\n— {author}'
+            formatted_text = f'"{quote_text_val}"\n\n— {author}'
             
             page.set_clipboard(formatted_text)
             
@@ -936,6 +894,37 @@ def main(page: ft.Page):
             print(f"Error copying quote: {ex}")
             show_error("Failed to copy quote")
     
+    def on_create_image_click(e):
+        try:
+            # Try to load ad on every interaction
+            try_load_banner_ad()
+            if not current_quote.get("text"):
+                show_error("No quote available")
+                return
+            
+            # Switch to create page
+            switch_page("create")
+            
+            # Show success message
+            snackbar = ft.SnackBar(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.IMAGE_ROUNDED, color="#10b981", size=20),
+                        ft.Text("Ready to create image!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                    ],
+                    spacing=8
+                ),
+                bgcolor="#1e293b",
+                duration=2000,
+                behavior=ft.SnackBarBehavior.FLOATING,
+            )
+            page.overlay.append(snackbar)
+            snackbar.open = True
+            page.update()
+        except Exception as ex:
+            print(f"Error navigating to create: {ex}")
+            show_error("Failed to navigate")
+    
     # Quote display container
     quote_content = ft.Column(
         [
@@ -956,38 +945,39 @@ def main(page: ft.Page):
     
     quote_container = ft.Container(
         content=quote_content,
-        border_radius=20,
+        border_radius=24,
         bgcolor=ft.Colors.with_opacity(0.9, "#1e293b"),
-        padding=30,
+        padding=32,
         gradient=ft.LinearGradient(
             begin=ft.alignment.top_left,
             end=ft.alignment.bottom_right,
             colors=[
-                ft.Colors.with_opacity(0.05, "#fbbf24"),
-                ft.Colors.with_opacity(0.02, "#1e293b")
+                ft.Colors.with_opacity(0.08, "#fbbf24"),
+                ft.Colors.with_opacity(0.03, "#1e293b"),
+                ft.Colors.with_opacity(0.05, "#60a5fa"),
             ]
         ),
-        border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
+        border=ft.border.all(1.5, ft.Colors.with_opacity(0.3, "#475569")),
         shadow=ft.BoxShadow(
             spread_radius=0,
-            blur_radius=30,
-            color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-            offset=ft.Offset(0, 15)
+            blur_radius=40,
+            color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK),
+            offset=ft.Offset(0, 20)
         ),
-        blur=ft.Blur(10, 10, ft.BlurTileMode.CLAMP),
+        blur=ft.Blur(15, 15, ft.BlurTileMode.CLAMP),
         height=300,
     )
     
     # Action buttons with visual indicators
-    def create_button(icon, label, on_click, is_primary=False, badge_text=None):
+    def create_button(icon, label, on_click, is_primary=False, badge_text=None, gradient=False):
         button_content = ft.Column(
             [
                 ft.Stack(
                     [
                         ft.Icon(
                             icon,
-                            color="#0f172a" if is_primary else "#fbbf24",
-                            size=22
+                            color="#0f172a" if is_primary else ("#fff" if gradient else "#fbbf24"),
+                            size=24
                         ),
                         # Badge indicator
                         ft.Container(
@@ -999,57 +989,65 @@ def main(page: ft.Page):
                             ),
                             bgcolor="#10b981",
                             border_radius=8,
-                            padding=ft.padding.symmetric(horizontal=4, vertical=2),
-                            right=-5,
-                            top=-5,
+                            padding=ft.padding.symmetric(horizontal=5, vertical=2),
+                            right=-6,
+                            top=-6,
                             visible=badge_text is not None
                         ) if badge_text else ft.Container(),
                     ],
-                    width=22,
-                    height=22,
+                    width=24,
+                    height=24,
                 ),
                 ft.Text(
                     label,
-                    size=10,
-                    color="#0f172a" if is_primary else "#fbbf24",
+                    size=11,
+                    color="#0f172a" if is_primary else ("#fff" if gradient else "#fbbf24"),
                     weight=ft.FontWeight.BOLD
                 )
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=5
+            spacing=6
         )
         
         return ft.Container(
             content=button_content,
-            bgcolor="#fbbf24" if is_primary else ft.Colors.with_opacity(0.05, "#1e293b"),
-            border=None if is_primary else ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
-            border_radius=12,
-            padding=12,
+            bgcolor="#fbbf24" if is_primary and not gradient else (None if gradient else ft.Colors.with_opacity(0.05, "#1e293b")),
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.top_left,
+                end=ft.alignment.bottom_right,
+                colors=["#a78bfa", "#ec4899", "#f59e0b"]
+            ) if gradient else None,
+            border=None if is_primary or gradient else ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
+            border_radius=14,
+            padding=14,
             ink=True,
             on_click=on_click,
             expand=True,
             shadow=ft.BoxShadow(
                 spread_radius=0,
-                blur_radius=15 if is_primary else 8,
-                color=ft.Colors.with_opacity(0.35 if is_primary else 0.2, "#fbbf24"),
-                offset=ft.Offset(0, 6)
-            ) if is_primary else None,
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+                blur_radius=20 if (is_primary or gradient) else 8,
+                color=ft.Colors.with_opacity(0.4 if (is_primary or gradient) else 0.2, "#fbbf24" if is_primary else "#a78bfa" if gradient else "#fbbf24"),
+                offset=ft.Offset(0, 8 if (is_primary or gradient) else 4)
+            ),
+            animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
         )
-    
-    # Check if daily quote is available
-    def has_daily_quote():
-        import datetime
-        today = datetime.date.today().isoformat()
-        return daily_quote_cache and daily_quote_date == today
     
     button_random = create_button(ft.Icons.SHUFFLE_ROUNDED, "Random", on_random_click, False)
     button_daily = create_button(ft.Icons.TODAY_ROUNDED, "Daily", on_daily_click, True, "★")
     button_copy = create_button(ft.Icons.CONTENT_COPY_ROUNDED, "Copy", on_copy_click, False)
+    button_create_img = create_button(ft.Icons.IMAGE_ROUNDED, "Create", on_create_image_click, False)
     
-    buttons_row = ft.Row(
-        [button_random, button_daily, button_copy],
-        spacing=8,
+    # First row - Quote actions
+    buttons_row_1 = ft.Row(
+        [button_random, button_daily],
+        spacing=10,
+        alignment=ft.MainAxisAlignment.CENTER
+    )
+    
+    # Second row - User actions
+    buttons_row_2 = ft.Row(
+        [button_copy, button_create_img],
+        spacing=10,
         alignment=ft.MainAxisAlignment.CENTER
     )
     
@@ -1057,9 +1055,16 @@ def main(page: ft.Page):
     header = ft.Container(
         content=ft.Column(
             [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.AUTO_STORIES_ROUNDED, size=40, color="#fbbf24", opacity=0.9),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                ft.Container(height=8),
                 ft.Text(
                     "Quote Explorer",
-                    size=32,
+                    size=36,
                     weight=ft.FontWeight.BOLD,
                     color="#f8fafc",
                     text_align=ft.TextAlign.CENTER,
@@ -1067,18 +1072,18 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Text(
                         "Daily inspiration at your fingertips",
-                        size=12,
+                        size=13,
                         color="#64748b",
                         text_align=ft.TextAlign.CENTER,
                         weight=ft.FontWeight.W_500
                     ),
-                    padding=ft.padding.only(top=2)
+                    padding=ft.padding.only(top=4)
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=4
+            spacing=0
         ),
-        padding=ft.padding.only(top=20, bottom=15, left=30, right=30)
+        padding=ft.padding.only(top=20, bottom=20, left=30, right=30)
     )
     
     # Home page content
@@ -1090,24 +1095,28 @@ def main(page: ft.Page):
                 padding=ft.padding.symmetric(horizontal=30)
             ),
             ft.Container(
-                content=error_container,
-                padding=ft.padding.only(top=16, bottom=8, left=30, right=30)
-            ),
-            ft.Container(
                 content=ft.Column(
                     [
                         ft.Container(
-                            content=ft.Text(
-                                "Quick Actions",
-                                size=14,
-                                weight=ft.FontWeight.BOLD,
-                                color="#94a3b8",
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.TOUCH_APP_ROUNDED, size=16, color="#fbbf24", opacity=0.8),
+                                    ft.Text(
+                                        "Quick Actions",
+                                        size=14,
+                                        weight=ft.FontWeight.BOLD,
+                                        color="#94a3b8",
+                                    ),
+                                ],
+                                spacing=6
                             ),
-                            padding=ft.padding.only(bottom=10)
+                            padding=ft.padding.only(bottom=12)
                         ),
-                        buttons_row,
+                        buttons_row_1,
+                        ft.Container(height=8),
+                        buttons_row_2,
                     ],
-                    spacing=12
+                    spacing=0
                 ),
                 padding=ft.padding.only(top=16, bottom=20, left=30, right=30)
             ),
@@ -1494,6 +1503,8 @@ def main(page: ft.Page):
                 print(f"Error selecting theme: {ex}")
         return handler
     
+    download_button_ref = ft.Ref[ft.Container]()
+    
     def generate_preview():
         try:
             if not PILLOW_AVAILABLE:
@@ -1505,6 +1516,9 @@ def main(page: ft.Page):
                 return
             
             create_loading.current.visible = True
+            preview_image.current.visible = False
+            if download_button_ref.current:
+                download_button_ref.current.visible = False
             page.update()
             
             # Generate image
@@ -1519,6 +1533,8 @@ def main(page: ft.Page):
             if img_base64:
                 preview_image.current.src_base64 = img_base64
                 preview_image.current.visible = True
+                if download_button_ref.current:
+                    download_button_ref.current.visible = True
             else:
                 show_error("Failed to generate image")
             
@@ -1536,31 +1552,177 @@ def main(page: ft.Page):
         except Exception as ex:
             print(f"Error in generate click: {ex}")
     
-    # Theme selection buttons
+    def on_download_click(e):
+        try:
+            try_load_banner_ad()
+            if not preview_image.current.src_base64:
+                show_error("Please generate an image first")
+                return
+            
+            # Get the base64 image data
+            img_base64 = preview_image.current.src_base64
+            
+            # Convert base64 to bytes
+            import base64
+            import datetime
+            img_bytes = base64.b64decode(img_base64)
+            
+            # Create filename with timestamp
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"quote_explorer_{timestamp}.png"
+            
+            # Save the image
+            if is_mobile:
+                # For mobile: use file picker to save
+                try:
+                    # Create a temporary file path
+                    import tempfile
+                    import os
+                    temp_dir = tempfile.gettempdir()
+                    temp_path = os.path.join(temp_dir, filename)
+                    
+                    # Write image to temp file
+                    with open(temp_path, 'wb') as f:
+                        f.write(img_bytes)
+                    
+                    # For Android/iOS, trigger download via file picker
+                    def save_result(e: ft.FilePickerResultEvent):
+                        if e.path:
+                            try:
+                                # Copy from temp to selected location
+                                import shutil
+                                shutil.copy2(temp_path, e.path)
+                                
+                                snackbar = ft.SnackBar(
+                                    content=ft.Row(
+                                        [
+                                            ft.Icon(ft.Icons.DOWNLOAD_DONE_ROUNDED, color="#10b981", size=20),
+                                            ft.Text("Image saved successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                                        ],
+                                        spacing=8
+                                    ),
+                                    bgcolor="#1e293b",
+                                    duration=2500,
+                                    behavior=ft.SnackBarBehavior.FLOATING,
+                                )
+                                page.overlay.append(snackbar)
+                                snackbar.open = True
+                                page.update()
+                            except Exception as ex:
+                                print(f"Error saving file: {ex}")
+                                show_error("Failed to save image")
+                        else:
+                            # User cancelled
+                            pass
+                    
+                    # Create file picker
+                    file_picker = ft.FilePicker(on_result=save_result)
+                    page.overlay.append(file_picker)
+                    page.update()
+                    
+                    # Open save dialog
+                    file_picker.save_file(
+                        file_name=filename,
+                        allowed_extensions=["png"],
+                    )
+                    
+                except Exception as ex:
+                    print(f"Error with file picker: {ex}")
+                    # Fallback: just save to temp and notify
+                    snackbar = ft.SnackBar(
+                        content=ft.Row(
+                            [
+                                ft.Icon(ft.Icons.INFO_OUTLINE, color="#fbbf24", size=20),
+                                ft.Text(f"Image saved to: {temp_path}", color="#fbbf24", size=12, weight=ft.FontWeight.W_500)
+                            ],
+                            spacing=8
+                        ),
+                        bgcolor="#1e293b",
+                        duration=3500,
+                        behavior=ft.SnackBarBehavior.FLOATING,
+                    )
+                    page.overlay.append(snackbar)
+                    snackbar.open = True
+                    page.update()
+            else:
+                # For desktop: use file picker
+                def save_result(e: ft.FilePickerResultEvent):
+                    if e.path:
+                        try:
+                            # Save image to selected path
+                            save_path = e.path if e.path.endswith('.png') else f"{e.path}.png"
+                            with open(save_path, 'wb') as f:
+                                f.write(img_bytes)
+                            
+                            snackbar = ft.SnackBar(
+                                content=ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.DOWNLOAD_DONE_ROUNDED, color="#10b981", size=20),
+                                        ft.Text("Image saved successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                                    ],
+                                    spacing=8
+                                ),
+                                bgcolor="#1e293b",
+                                duration=2500,
+                                behavior=ft.SnackBarBehavior.FLOATING,
+                            )
+                            page.overlay.append(snackbar)
+                            snackbar.open = True
+                            page.update()
+                        except Exception as ex:
+                            print(f"Error saving file: {ex}")
+                            show_error(f"Failed to save: {str(ex)[:50]}")
+                    else:
+                        # User cancelled
+                        pass
+                
+                # Create file picker
+                file_picker = ft.FilePicker(on_result=save_result)
+                page.overlay.append(file_picker)
+                page.update()
+                
+                # Open save dialog
+                file_picker.save_file(
+                    file_name=filename,
+                    allowed_extensions=["png"],
+                )
+            
+        except Exception as ex:
+            print(f"Error downloading image: {ex}")
+            show_error(f"Download error: {str(ex)[:50]}")
+    
+    # Theme selection buttons with improved spacing
     theme_buttons = []
     for theme_key, theme_data in BACKGROUND_THEMES.items():
         theme_btn = ft.Container(
             content=ft.Column(
                 [
-                    ft.Icon(theme_data["icon"], size=24, color="#fbbf24"),
+                    ft.Icon(theme_data["icon"], size=18, color="#fbbf24"),
                     ft.Text(
                         theme_data["name"],
-                        size=10,
+                        size=12,
                         color="#f8fafc",
-                        weight=ft.FontWeight.W_500,
+                        weight=ft.FontWeight.W_600,
                         text_align=ft.TextAlign.CENTER,
+                        max_lines=2,
                     )
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4
+                spacing=6
             ),
             bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
             border=ft.border.all(1.5, ft.Colors.with_opacity(0.3, "#fbbf24")),
-            border_radius=12,
-            padding=12,
+            border_radius=14,
+            padding=14,
             ink=True,
             on_click=on_theme_select(theme_key),
-            width=80,
+            width=90,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=8,
+                color=ft.Colors.with_opacity(0.15, "#fbbf24"),
+                offset=ft.Offset(0, 4)
+            ),
             animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
         theme_buttons.append(theme_btn)
@@ -1592,10 +1754,40 @@ def main(page: ft.Page):
     selected_theme_text = ft.Text(
         ref=selected_theme,
         value="Sunset",
-        size=14,
+        size=15,
         color="#fbbf24",
         weight=ft.FontWeight.BOLD,
         text_align=ft.TextAlign.CENTER,
+    )
+    
+    download_button = ft.Container(
+        ref=download_button_ref,
+        content=ft.Row(
+            [
+                ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, size=22, color="#0f172a"),
+                ft.Text(
+                    "Download Image",
+                    size=14,
+                    color="#0f172a",
+                    weight=ft.FontWeight.BOLD
+                )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8
+        ),
+        bgcolor="#fbbf24",
+        border_radius=14,
+        padding=16,
+        ink=True,
+        on_click=on_download_click,
+        shadow=ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=15,
+            color=ft.Colors.with_opacity(0.4, "#fbbf24"),
+            offset=ft.Offset(0, 6)
+        ),
+        animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+        visible=False,
     )
     
     create_content = ft.Column(
@@ -1604,60 +1796,83 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text(
-                            "Select Background Theme",
-                            size=13,
-                            color="#94a3b8",
-                            weight=ft.FontWeight.BOLD,
-                        ),
-                        ft.Container(height=8),
-                        ft.Row(
-                            theme_buttons[:4],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=8,
-                        ),
-                        ft.Container(height=8),
-                        ft.Row(
-                            theme_buttons[4:],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=8,
-                        ),
-                        ft.Container(height=12),
                         ft.Container(
                             content=ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.PALETTE, size=16, color="#fbbf24"),
-                                    ft.Text("Selected: ", size=12, color="#94a3b8"),
+                                    ft.Icon(ft.Icons.PALETTE_ROUNDED, size=18, color="#fbbf24"),
+                                    ft.Text(
+                                        "Select Background Theme",
+                                        size=14,
+                                        color="#f8fafc",
+                                        weight=ft.FontWeight.BOLD,
+                                    ),
+                                ],
+                                spacing=8
+                            ),
+                            padding=ft.padding.only(bottom=12)
+                        ),
+                        ft.Row(
+                            theme_buttons[:4],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=10,
+                        ),
+                        ft.Container(height=10),
+                        ft.Row(
+                            theme_buttons[4:8],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=10,
+                        ),
+                        ft.Container(height=10),
+                        ft.Row(
+                            theme_buttons[8:],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                            spacing=10,
+                        ),
+                        ft.Container(height=16),
+                        ft.Container(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=18, color="#10b981"),
+                                    ft.Text("Selected: ", size=13, color="#94a3b8", weight=ft.FontWeight.W_500),
                                     selected_theme_text,
                                 ],
                                 alignment=ft.MainAxisAlignment.CENTER,
-                                spacing=4
+                                spacing=6
                             ),
-                            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
-                            border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
-                            border_radius=10,
-                            padding=10,
+                            bgcolor=ft.Colors.with_opacity(0.07, "#1e293b"),
+                            border=ft.border.all(1, ft.Colors.with_opacity(0.25, "#10b981")),
+                            border_radius=12,
+                            padding=12,
                         ),
                     ],
                     spacing=0
                 ),
-                padding=ft.padding.symmetric(horizontal=30)
+                padding=ft.padding.symmetric(horizontal=30),
             ),
-            ft.Container(height=16),
+            ft.Container(height=20),
             ft.Container(
                 content=ft.ElevatedButton(
-                    "Generate Image",
-                    icon=ft.Icons.AUTO_AWESOME,
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=20),
+                            ft.Text("Generate Image", size=15, weight=ft.FontWeight.BOLD),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=8
+                    ),
                     on_click=on_generate_click,
                     bgcolor="#fbbf24",
+                    width=300,
                     color="#0f172a",
                     style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=12),
-                        padding=ft.padding.symmetric(horizontal=32, vertical=16),
+                        shape=ft.RoundedRectangleBorder(radius=14),
+                        padding=ft.padding.symmetric(horizontal=36, vertical=18),
+                        elevation=8,
                     ),
                 ),
                 alignment=ft.alignment.center,
             ),
+            ft.Container(height=20),
             ft.Container(
                 content=ft.Stack(
                     [
@@ -1665,8 +1880,8 @@ def main(page: ft.Page):
                             content=ft.Image(
                                 ref=preview_image,
                                 visible=False,
-                                width=300,
-                                height=300,
+                                width=320,
+                                height=320,
                                 fit=ft.ImageFit.CONTAIN,
                                 border_radius=16,
                             ),
@@ -1676,13 +1891,13 @@ def main(page: ft.Page):
                             ref=create_loading,
                             content=ft.Column(
                                 [
-                                    ft.ProgressRing(color="#fbbf24", width=40, height=40, stroke_width=3),
-                                    ft.Container(height=12),
+                                    ft.ProgressRing(color="#fbbf24", width=50, height=50, stroke_width=4),
+                                    ft.Container(height=16),
                                     ft.Text(
                                         "Creating masterpiece...",
-                                        size=12,
-                                        color="#64748b",
-                                        weight=ft.FontWeight.W_500
+                                        size=13,
+                                        color="#94a3b8",
+                                        weight=ft.FontWeight.W_600
                                     )
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1694,37 +1909,42 @@ def main(page: ft.Page):
                     ],
                 ),
                 padding=ft.padding.symmetric(horizontal=30),
-                expand=True,
+                height=340,
             ),
-            
-            # <<< هنا كان الخطأ وتم إصلاحه >>>
+            ft.Container(
+                content=download_button,
+                padding=ft.padding.symmetric(horizontal=30),
+                alignment=ft.alignment.center,
+            ),
+            ft.Container(height=10),
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(ft.Icons.INFO_OUTLINE, color="#fb923c", size=32),
-                        ft.Container(height=8),
+                        ft.Icon(ft.Icons.INFO_OUTLINE_ROUNDED, color="#fb923c", size=36),
+                        ft.Container(height=10),
                         ft.Text(
                             "Image creation requires Pillow",
-                            size=13,
+                            size=14,
                             color="#f8fafc",
                             weight=ft.FontWeight.BOLD,
                             text_align=ft.TextAlign.CENTER,
                         ),
-                        ft.Container(height=4),
+                        ft.Container(height=6),
                         ft.Text(
                             "Install: pip install Pillow==10.4.0",
-                            size=11,
+                            size=12,
                             color="#94a3b8",
                             text_align=ft.TextAlign.CENTER,
+                            weight=ft.FontWeight.W_500,
                         ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
-                padding=20,
+                padding=18,
                 bgcolor=ft.Colors.with_opacity(0.1, "#fb923c"),
                 border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fb923c")),
-                border_radius=12,
-                margin=ft.margin.symmetric(horizontal=30),
+                border_radius=14,
+                margin=ft.margin.only(left=30, right=30, bottom=20),
             ) if not PILLOW_AVAILABLE else ft.Container(),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -1732,7 +1952,7 @@ def main(page: ft.Page):
         scroll=ft.ScrollMode.ADAPTIVE,
         expand=True,
     )
-
+    
     # About page content
     about_content = ft.Column(
         [
@@ -1800,6 +2020,7 @@ def main(page: ft.Page):
                                     ft.Text("• Browse extensive collection", size=13, color="#94a3b8"),
                                     ft.Text("• Create beautiful quote images", size=13, color="#94a3b8"),
                                     ft.Text("• 8 stunning background themes", size=13, color="#94a3b8"),
+                                    ft.Text("• Download generated images", size=13, color="#94a3b8"),
                                     ft.Text("• One-tap copy to clipboard", size=13, color="#94a3b8"),
                                     ft.Text("• Beautiful modern interface", size=13, color="#94a3b8"),
                                     ft.Text("• Offline quote support", size=13, color="#94a3b8"),

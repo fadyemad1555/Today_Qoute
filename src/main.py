@@ -26,7 +26,7 @@ try:
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
-    print("Pillow not available. Install with: pip install Pillow==10.4.0")
+    print("Pillow not available. Install with: pip install Pillow")
 
 # Try to import ads, but gracefully handle if not available
 try:
@@ -70,54 +70,64 @@ OFFLINE_QUOTES = [
     {"q": "Change your thoughts and you change your world.", "a": "Norman Vincent Peale"},
 ]
 
-# Background themes for quote images
-BACKGROUND_THEMES = {
+# Enhanced Background themes for quote images with emojis
+ENHANCED_BACKGROUND_THEMES = {
     "sunset": {
         "name": "Sunset",
         "colors": [(255, 94, 77), (245, 158, 11), (251, 191, 36)],
-        "icon": ft.Icons.WB_SUNNY
+        "icon": ft.Icons.WB_SUNNY,
+        "icon_emoji": "🌅",
+        "description": "Warm orange to yellow gradient"
     },
     "ocean": {
         "name": "Ocean",
         "colors": [(14, 165, 233), (56, 189, 248), (125, 211, 252)],
-        "icon": ft.Icons.WATER
+        "icon": ft.Icons.WATER,
+        "icon_emoji": "🌊",
+        "description": "Deep blue to light blue gradient"
     },
     "forest": {
         "name": "Forest",
         "colors": [(34, 197, 94), (74, 222, 128), (134, 239, 172)],
-        "icon": ft.Icons.FOREST
+        "icon": ft.Icons.FOREST,
+        "icon_emoji": "🌲",
+        "description": "Rich green gradient"
     },
     "night": {
         "name": "Night Sky",
         "colors": [(30, 27, 75), (67, 56, 202), (99, 102, 241)],
-        "icon": ft.Icons.NIGHTLIGHT
+        "icon": ft.Icons.NIGHTLIGHT,
+        "icon_emoji": "🌙",
+        "description": "Deep purple to blue gradient"
     },
     "autumn": {
         "name": "Autumn",
         "colors": [(234, 88, 12), (251, 146, 60), (253, 186, 116)],
-        "icon": ft.Icons.PARK
+        "icon": ft.Icons.PARK,
+        "icon_emoji": "🍂",
+        "description": "Warm autumn colors"
     },
     "lavender": {
         "name": "Lavender",
         "colors": [(167, 139, 250), (196, 181, 253), (221, 214, 254)],
-        "icon": ft.Icons.SPA
+        "icon": ft.Icons.SPA,
+        "icon_emoji": "💜",
+        "description": "Soft purple gradient"
     },
     "space": {
         "name": "Space",
         "colors": [(17, 24, 39), (55, 65, 81), (107, 114, 128)],
-        "icon": ft.Icons.ROCKET_LAUNCH
-    },
-    "coral": {
-        "name": "Coral Reef",
-        "colors": [(251, 113, 133), (252, 165, 165), (254, 205, 211)],
-        "icon": ft.Icons.WAVES
+        "icon": ft.Icons.ROCKET_LAUNCH,
+        "icon_emoji": "🚀",
+        "description": "Dark cosmic gradient"
     },
     "random": {
-        "name": "random",
-        "colors": [(251, 113, 133), (252, 165, 165), (254, 205, 211)],
-        "icon": ft.Icons.ROCKET
+        "name": "Random Photo",
+        "colors": None,
+        "icon": ft.Icons.PHOTO_ROUNDED,
+        "icon_emoji": "🎲",
+        "description": "Random beautiful photo background"
     },
-    
 }
 
 
@@ -167,43 +177,38 @@ def safe_api_request(url, timeout=8):
         print(f"Unexpected error in API request: {e}")
         return None
 
-import requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-import random, io, base64
-
 def get_random_background():
-    """تحميل صورة عشوائية بدون API"""
+    """Load random background image without API"""
     try:
-        # قائمة IDs من Picsum مناسبة للخلفيات مع اقتباسات
-        picsum_ids = [12,13,14,15,16,17,43,58,74,76,88,89,92,93,1036,1037]
+        # List of suitable Picsum IDs for quote backgrounds
+        picsum_ids = [12, 13, 14, 15, 16, 17, 43, 58, 74, 76, 88, 89, 92, 93, 1036, 1037]
         chosen_id = random.choice(picsum_ids)
 
         url = f"https://picsum.photos/id/{chosen_id}/1080/1080?blur"
         headers = {"User-Agent": "Mozilla/5.0"}
-        resp=requests.get(url, headers=headers, timeout=10)
-        print(resp)
+        resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
         img = Image.open(io.BytesIO(resp.content)).convert("RGB")
         return img
 
     except Exception as e:
-        print("فشل تحميل صورة خلفية عشوائية:", e)
+        print("Failed to load random background image:", e)
         return None
 
 def create_quote_image(quote_text, author, theme_key="sunset"):
     width, height = 1080, 1080
 
-    # إذا Random → استخدم صورة خلفية من الإنترنت
+    # If Random → use background image from internet
     if theme_key.lower() == "random":
         img = get_random_background()
         if img is None:
             return None
     else:
-        # خلفيات gradient القديمة
+        # Old gradient backgrounds
         img = Image.new('RGB', (width, height))
         draw = ImageDraw.Draw(img)
 
-        theme = BACKGROUND_THEMES.get(theme_key, BACKGROUND_THEMES["sunset"])
+        theme = ENHANCED_BACKGROUND_THEMES.get(theme_key, ENHANCED_BACKGROUND_THEMES["sunset"])
         colors = theme["colors"]
 
         for y in range(height):
@@ -221,14 +226,14 @@ def create_quote_image(quote_text, author, theme_key="sunset"):
 
             draw.line([(0, y), (width, y)], fill=(r, g, b))
 
-    # ---- النص ----
+    # ---- Text ----
     draw = ImageDraw.Draw(img)
-    font="src/assets/arial.ttf"
-    if not os.path.isfile(font):
-        font="assets/arial.ttf"
+    font_path = "src/assets/arial.ttf"
+    if not os.path.isfile(font_path):
+        font_path = "assets/arial.ttf"
     try:
-        quote_font = ImageFont.truetype(font, 72)
-        author_font = ImageFont.truetype(font, 52)
+        quote_font = ImageFont.truetype(font_path, 72)
+        author_font = ImageFont.truetype(font_path, 52)
     except:
         quote_font = ImageFont.load_default()
         author_font = ImageFont.load_default()
@@ -436,7 +441,7 @@ def main(page: ft.Page):
     page.padding = 0
     page.bgcolor = "#0a0e1a"
     
-    # Banner ad state management - Define globally at start
+    # Banner ad state management
     global ad_loaded_successfully, ad_load_attempted
     ad_loaded_successfully = False
     ad_load_attempted = False
@@ -768,9 +773,9 @@ def main(page: ft.Page):
                 error_container.visible=True
                 snack_error = ft.SnackBar(
                     content=error_container,
-                    bgcolor=ft.Colors.BLACK,            # بدون خلفية
-                    shape=None,              # بدون شكل
-                    elevation=0,             # بدون ظل
+                    bgcolor=ft.Colors.BLACK,
+                    shape=None,
+                    elevation=0,
                     margin=0,
                     padding=0,
                 )
@@ -880,7 +885,7 @@ def main(page: ft.Page):
                 content=ft.Row(
                     [
                         ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=20),
-                        ft.Text("Quote copied beautifully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                        ft.Text("Quote Copied ", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
                     ],
                     spacing=8
                 ),
@@ -1040,14 +1045,7 @@ def main(page: ft.Page):
     
     # First row - Quote actions
     buttons_row_1 = ft.Row(
-        [button_random, button_daily],
-        spacing=10,
-        alignment=ft.MainAxisAlignment.CENTER
-    )
-    
-    # Second row - User actions
-    buttons_row_2 = ft.Row(
-        [button_copy, button_create_img],
+        [button_random, button_daily, button_copy, button_create_img],
         spacing=10,
         alignment=ft.MainAxisAlignment.CENTER
     )
@@ -1115,7 +1113,6 @@ def main(page: ft.Page):
                         ),
                         buttons_row_1,
                         ft.Container(height=8),
-                        buttons_row_2,
                     ],
                     spacing=0
                 ),
@@ -1482,44 +1479,210 @@ def main(page: ft.Page):
         expand=True,
     )
     
-    # Create Image Page
+    # =========================================================================
+    # ENHANCED CREATE PAGE COMPONENTS
+    # =========================================================================
+    
+# Enhanced Create Page Components - Simplified and Fixed
+# Enhanced Create Page Components - Fixed Reference Order
     selected_theme = ft.Ref[ft.Text]()
     current_theme_key = "sunset"
+    current_background_type = "gradient"
     preview_image = ft.Ref[ft.Image]()
-    create_loading = ft.Ref[ft.Container]()
-    
+    background_type_ref = ft.Ref[ft.Text]()
+
+    # Store theme buttons for easy access
+    theme_buttons = {}
+
+    # Track if we have a valid quote for generation
+    has_valid_quote = False
+
+    # Define references FIRST before using them
+    quote_text_ref = ft.Ref[ft.Text]()
+    author_text_ref = ft.Ref[ft.Text]()
+
+    # Status text for quote availability - Define this early
+    quote_status_text = ft.Text(
+        "ⓘ Get a quote from Home page first",
+        size=12,
+        color="#fbbf24",
+        weight=ft.FontWeight.W_500,
+        text_align=ft.TextAlign.CENTER,
+    )
+
+    # Current quote display - Define this early
+    current_quote_display = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.FORMAT_QUOTE_ROUNDED, size=16, color="#fbbf24"),
+                        ft.Text(
+                            "Current Quote",
+                            size=14,
+                            color="#f8fafc",
+                            weight=ft.FontWeight.BOLD
+                        )
+                    ],
+                    spacing=8
+                ),
+                ft.Container(height=12),
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                ref=quote_text_ref,
+                                size=14,
+                                color="#f8fafc",
+                                weight=ft.FontWeight.W_500,
+                                text_align=ft.TextAlign.CENTER,
+                                selectable=True,
+                            ),
+                            ft.Container(height=6),
+                            ft.Text(
+                                ref=author_text_ref,
+                                size=12,
+                                color="#94a3b8",
+                                italic=True,
+                                text_align=ft.TextAlign.CENTER,
+                                selectable=True,
+                            ),
+                        ],
+                        spacing=0,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=16,
+                    bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
+                    border_radius=12,
+                    border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
+                ),
+            ],
+            spacing=0
+        ),
+        bgcolor=ft.Colors.with_opacity(0.02, "#1e293b"),
+        border=ft.border.all(1, ft.Colors.with_opacity(0.1, "#334155")),
+        border_radius=16,
+        padding=20,
+    )
+
+    # Improved function to update current quote display
+    def update_current_quote_display():
+        global has_valid_quote
+        try:
+            if current_quote.get("text"):
+                quote_text_ref.current.value = f'"{current_quote["text"]}"'
+                author_text_ref.current.value = f"— {current_quote.get('author', 'Unknown')}"
+                has_valid_quote = True
+                
+                # Enable generate button and show hint
+                generate_btn_container.disabled = False
+                quote_status_text.value = "✓ Ready to generate image"
+                quote_status_text.color = "#10b981"
+            else:
+                quote_text_ref.current.value = "No quote selected"
+                author_text_ref.current.value = "Go to Home page to get a quote"
+                has_valid_quote = False
+                
+                # Disable generate button and show instruction
+                generate_btn_container.disabled = True
+                quote_status_text.value = "ⓘ Get a quote from Home page first"
+                quote_status_text.color = "#fbbf24"
+            
+            if page_container.content == create_content:
+                page.update()
+        except Exception as e:
+            print(f"Error updating quote display: {e}")
+
+    # Background type selection handler
+    def on_background_type_select(bg_type):
+        def handler(e):
+            nonlocal current_theme_key, current_background_type
+            try:
+                try_load_banner_ad()
+                current_background_type = bg_type
+                
+                # Update button styles
+                gradient_btn_container.border = ft.border.all(2, "#fbbf24" if bg_type == "gradient" else ft.Colors.with_opacity(0.3, "#475569"))
+                gradient_btn_container.bgcolor = ft.Colors.with_opacity(0.15, "#fbbf24") if bg_type == "gradient" else ft.Colors.with_opacity(0.03, "#1e293b")
+                gradient_btn_container.content.controls[0].color = "#fbbf24" if bg_type == "gradient" else "#64748b"
+                gradient_btn_container.content.controls[1].color = "#fbbf24" if bg_type == "gradient" else "#64748b"
+                
+                photo_btn_container.border = ft.border.all(2, "#fbbf24" if bg_type == "photo" else ft.Colors.with_opacity(0.3, "#475569"))
+                photo_btn_container.bgcolor = ft.Colors.with_opacity(0.15, "#fbbf24") if bg_type == "photo" else ft.Colors.with_opacity(0.03, "#1e293b")
+                photo_btn_container.content.controls[0].color = "#fbbf24" if bg_type == "photo" else "#64748b"
+                photo_btn_container.content.controls[1].color = "#fbbf24" if bg_type == "photo" else "#64748b"
+                
+                # Show/hide theme selection based on background type
+                if bg_type == "photo":
+                    current_theme_key = "random"
+                    theme_selection_container.visible = False
+                else:
+                    current_theme_key = "sunset"
+                    theme_selection_container.visible = True
+                    update_theme_buttons_active_state()
+                
+                # Auto-generate if we have a valid quote
+                if has_valid_quote:
+                    generate_preview()
+                
+                page.update()
+            except Exception as ex:
+                print(f"Error selecting background type: {ex}")
+        return handler
+
+    # Theme selection handler
     def on_theme_select(theme_key):
         def handler(e):
             nonlocal current_theme_key
             try:
                 try_load_banner_ad()
                 current_theme_key = theme_key
-                selected_theme.current.value = BACKGROUND_THEMES[theme_key]["name"]
-                page.update()
+                update_theme_buttons_active_state()
                 
-                # Generate preview
-                if current_quote.get("text"):
+                # Auto-generate if we have a valid quote
+                if has_valid_quote:
                     generate_preview()
+                
+                page.update()
             except Exception as ex:
                 print(f"Error selecting theme: {ex}")
         return handler
-    
-    download_button_ref = ft.Ref[ft.Container]()
-    
+
+    # Function to update theme buttons active state
+    def update_theme_buttons_active_state():
+        """Update the visual state of all theme buttons"""
+        try:
+            for theme_key, button in theme_buttons.items():
+                is_active = theme_key == current_theme_key
+                button.border = ft.border.all(2, "#fbbf24" if is_active else ft.Colors.with_opacity(0.3, "#475569"))
+                button.bgcolor = ft.Colors.with_opacity(0.15, "#fbbf24") if is_active else ft.Colors.with_opacity(0.03, "#1e293b")
+                
+                if hasattr(button.content, 'controls') and len(button.content.controls) >= 2:
+                    button.content.controls[0].color = "#fbbf24" if is_active else "#64748b"
+                    button.content.controls[1].color = "#fbbf24" if is_active else "#64748b"
+        except Exception as e:
+            print(f"Error updating theme buttons: {e}")
+
+    # Improved generate preview function with better logic
     def generate_preview():
         try:
             if not PILLOW_AVAILABLE:
-                show_error("Pillow library not available")
+                show_error("Pillow library not available. Install with: pip install Pillow")
                 return
             
             if not current_quote.get("text"):
-                show_error("No quote available")
+                show_error("No quote available. Please get a quote first from the Home page.")
                 return
             
-            create_loading.current.visible = True
-            preview_image.current.visible = False
+            # Show loading state
+            create_loading.visible = True
+            generating_text.visible = True
+            preview_placeholder.visible = False
+            if preview_image.current:
+                preview_image.current.visible = False
             if download_button_ref.current:
                 download_button_ref.current.visible = False
+            generate_btn_container.disabled = True
             page.update()
             
             # Generate image
@@ -1529,431 +1692,501 @@ def main(page: ft.Page):
                 current_theme_key
             )
             
-            create_loading.current.visible = False
+            create_loading.visible = False
+            generating_text.visible = False
+            generate_btn_container.disabled = False
             
-            if img_base64:
+            if img_base64 and preview_image.current:
                 preview_image.current.src_base64 = img_base64
                 preview_image.current.visible = True
+                preview_placeholder.visible = False
                 if download_button_ref.current:
                     download_button_ref.current.visible = True
+                
+                # Show success message
+                snackbar = ft.SnackBar(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, color="#10b981", size=20),
+                            ft.Text("Image generated successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                        ],
+                        spacing=8
+                    ),
+                    bgcolor="#1e293b",
+                    duration=2000,
+                )
+                page.overlay.append(snackbar)
+                snackbar.open = True
             else:
-                show_error("Failed to generate image, make sure you are online.")
+                show_error("Failed to generate image. Please check your internet connection.")
+                preview_placeholder.visible = True
             
             page.update()
         except Exception as e:
             print(f"Error generating preview: {e}")
-            create_loading.current.visible = False
-            show_error("Error generating image")
+            create_loading.visible = False
+            generating_text.visible = False
+            generate_btn_container.disabled = False
+            preview_placeholder.visible = True
+            show_error("Error generating image preview")
             page.update()
-    
+
+    # Generate button handler with improved logic
     def on_generate_click(e):
         try:
             try_load_banner_ad()
+            
+            # If no quote available, show helpful message
+            if not current_quote.get("text"):
+                show_error("No quote available. Please:\n1. Go to Home page\n2. Get a Daily or Random quote\n3. Return here to create an image")
+                return
+            
             generate_preview()
         except Exception as ex:
             print(f"Error in generate click: {ex}")
-    
+
+    # Download button handler
     def on_download_click(e):
         try:
             try_load_banner_ad()
-            if not preview_image.current.src_base64:
+            if not preview_image.current or not preview_image.current.src_base64:
                 show_error("Please generate an image first")
                 return
             
+            # Show downloading state
+            download_button_ref.current.content = ft.Row(
+                [
+                    ft.ProgressRing(width=16, height=16, stroke_width=2, color="#10b981"),
+                    ft.Text("Downloading...", size=14, color="#10b981", weight=ft.FontWeight.BOLD)
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8
+            )
+            page.update()
+            
             # Get the base64 image data
             img_base64 = preview_image.current.src_base64
-            
-            # Convert base64 to bytes
             import base64
             import datetime
             img_bytes = base64.b64decode(img_base64)
             
             # Create filename with timestamp
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"quote_explorer_{timestamp}.png"
+            filename = f"inspirational_quote_{timestamp}.png"
             
             # Save the image
-            if is_mobile:
-                # For mobile: use file picker to save
-                try:
-                    # Create a temporary file path
-                    import tempfile
-                    import os
-                    temp_dir = tempfile.gettempdir()
-                    temp_path = os.path.join(temp_dir, filename)
-                    
-                    # Write image to temp file
-                    with open(temp_path, 'wb') as f:
-                        f.write(img_bytes)
-                    
-                    # For Android/iOS, trigger download via file picker
-                    def save_result(e: ft.FilePickerResultEvent):
-                        if e.path:
-                            try:
-                                # Copy from temp to selected location
-                                import shutil
-                                shutil.copy2(temp_path, e.path)
-                                
-                                snackbar = ft.SnackBar(
-                                    content=ft.Row(
-                                        [
-                                            ft.Icon(ft.Icons.DOWNLOAD_DONE_ROUNDED, color="#10b981", size=20),
-                                            ft.Text("Image saved successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
-                                        ],
-                                        spacing=8
-                                    ),
-                                    bgcolor="#1e293b",
-                                    duration=2500,
-                                    behavior=ft.SnackBarBehavior.FLOATING,
-                                )
-                                page.overlay.append(snackbar)
-                                snackbar.open = True
-                                page.update()
-                            except Exception as ex:
-                                print(f"Error saving file: {ex}")
-                                show_error("Failed to save image")
-                        else:
-                            # User cancelled
-                            pass
-                    
-                    # Create file picker
-                    file_picker = ft.FilePicker(on_result=save_result)
-                    page.overlay.append(file_picker)
-                    page.update()
-                    
-                    # Open save dialog
-                    file_picker.save_file(
-                        file_name=filename,
-                        allowed_extensions=["png"],
-                    )
-                    
-                except Exception as ex:
-                    print(f"Error with file picker: {ex}")
-                    # Fallback: just save to temp and notify
-                    snackbar = ft.SnackBar(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.INFO_OUTLINE, color="#fbbf24", size=20),
-                                ft.Text(f"Image saved to: {temp_path}", color="#fbbf24", size=12, weight=ft.FontWeight.W_500)
-                            ],
-                            spacing=8
-                        ),
-                        bgcolor="#1e293b",
-                        duration=3500,
-                        behavior=ft.SnackBarBehavior.FLOATING,
-                    )
-                    page.overlay.append(snackbar)
-                    snackbar.open = True
-                    page.update()
-            else:
-                # For desktop: use file picker
-                def save_result(e: ft.FilePickerResultEvent):
-                    if e.path:
-                        try:
-                            # Save image to selected path
-                            save_path = e.path if e.path.endswith('.png') else f"{e.path}.png"
-                            with open(save_path, 'wb') as f:
-                                f.write(img_bytes)
-                            
-                            snackbar = ft.SnackBar(
-                                content=ft.Row(
-                                    [
-                                        ft.Icon(ft.Icons.DOWNLOAD_DONE_ROUNDED, color="#10b981", size=20),
-                                        ft.Text("Image saved successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
-                                    ],
-                                    spacing=8
-                                ),
-                                bgcolor="#1e293b",
-                                duration=2500,
-                                behavior=ft.SnackBarBehavior.FLOATING,
-                            )
-                            page.overlay.append(snackbar)
-                            snackbar.open = True
-                            page.update()
-                        except Exception as ex:
-                            print(f"Error saving file: {ex}")
-                            show_error(f"Failed to save: {str(ex)[:50]}")
-                    else:
-                        # User cancelled
-                        pass
-                
-                # Create file picker
-                file_picker = ft.FilePicker(on_result=save_result)
-                page.overlay.append(file_picker)
-                page.update()
-                
-                # Open save dialog
-                file_picker.save_file(
-                    file_name=filename,
-                    allowed_extensions=["png"],
+            def save_result(e: ft.FilePickerResultEvent):
+                # Reset download button
+                download_button_ref.current.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, color="#10b981", size=20),
+                        ft.Text("Download Image", size=14, color="#10b981", weight=ft.FontWeight.BOLD)
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8
                 )
+                
+                if e.path:
+                    try:
+                        save_path = e.path if e.path.endswith('.png') else f"{e.path}.png"
+                        with open(save_path, 'wb') as f:
+                            f.write(img_bytes)
+                        
+                        snackbar = ft.SnackBar(
+                            content=ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.DOWNLOAD_DONE_ROUNDED, color="#10b981", size=20),
+                                    ft.Text("Image saved successfully!", color="#fbbf24", size=14, weight=ft.FontWeight.W_500)
+                                ],
+                                spacing=8
+                            ),
+                            bgcolor="#1e293b",
+                            duration=3000,
+                        )
+                        page.overlay.append(snackbar)
+                        snackbar.open = True
+                    except Exception as ex:
+                        print(f"Error saving file: {ex}")
+                        show_error("Failed to save image")
+                page.update()
+            
+            file_picker = ft.FilePicker(on_result=save_result)
+            page.overlay.append(file_picker)
+            file_picker.save_file(file_name=filename, allowed_extensions=["png"])
             
         except Exception as ex:
             print(f"Error downloading image: {ex}")
             show_error(f"Download error: {str(ex)[:50]}")
-    
-    # Theme selection buttons with improved spacing
-    theme_buttons = []
-    for theme_key, theme_data in BACKGROUND_THEMES.items():
-        theme_btn = ft.Container(
+            
+            # Reset download button on error
+            if download_button_ref.current:
+                download_button_ref.current.content = ft.Row(
+                    [
+                        ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, color="#10b981", size=20),
+                        ft.Text("Download Image", size=14, color="#10b981", weight=ft.FontWeight.BOLD)
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=8
+                )
+                page.update()
+
+    # Loading indicator
+    create_loading = ft.Container(
+        content=ft.Column(
+            [
+                ft.ProgressRing(
+                    color="#fbbf24",
+                    width=40,
+                    height=40,
+                    stroke_width=3
+                ),
+                ft.Container(height=8),
+                ft.Text(
+                    "Creating your image...",
+                    size=12,
+                    color="#64748b",
+                    weight=ft.FontWeight.W_500
+                )
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=0
+        ),
+        visible=False,
+        alignment=ft.alignment.center
+    )
+
+    generating_text = ft.Text(
+        "This may take a few seconds",
+        size=11,
+        color="#64748b",
+        weight=ft.FontWeight.W_400,
+        visible=False
+    )
+
+    # Background type selection buttons
+    gradient_btn_container = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.GRADIENT_ROUNDED, size=24, color="#fbbf24"),
+                ft.Text("Gradient", size=11, color="#fbbf24", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        border=ft.border.all(2, "#fbbf24"),
+        bgcolor=ft.Colors.with_opacity(0.15, "#fbbf24"),
+        border_radius=12,
+        padding=14,
+        ink=True,
+        on_click=on_background_type_select("gradient"),
+    )
+
+    photo_btn_container = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.PHOTO_ROUNDED, size=24, color="#64748b"),
+                ft.Text("Photo", size=11, color="#64748b", weight=ft.FontWeight.BOLD)
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=6
+        ),
+        border=ft.border.all(1.5, ft.Colors.with_opacity(0.3, "#475569")),
+        bgcolor=ft.Colors.with_opacity(0.03, "#1e293b"),
+        border_radius=12,
+        padding=14,
+        ink=True,
+        on_click=on_background_type_select("photo"),
+    )
+
+    # Theme selection grid
+    def create_theme_button(theme_key, theme_data):
+        is_active = theme_key == current_theme_key
+        button = ft.Container(
             content=ft.Column(
                 [
-                    ft.Icon(theme_data["icon"], size=18, color="#fbbf24"),
+                    ft.Text(
+                        theme_data["icon_emoji"],
+                        size=20,
+                        color="#fbbf24" if is_active else "#64748b"
+                    ),
                     ft.Text(
                         theme_data["name"],
-                        size=12,
-                        color="#f8fafc",
-                        weight=ft.FontWeight.W_600,
-                        text_align=ft.TextAlign.CENTER,
-                        max_lines=2,
+                        size=10,
+                        color="#fbbf24" if is_active else "#64748b",
+                        weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER
                     )
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=6
             ),
-            bgcolor=ft.Colors.with_opacity(0.05, "#1e293b"),
-            border=ft.border.all(1.5, ft.Colors.with_opacity(0.3, "#fbbf24")),
-            border_radius=14,
-            padding=14,
+            bgcolor=ft.Colors.with_opacity(0.15, "#fbbf24") if is_active else ft.Colors.with_opacity(0.03, "#1e293b"),
+            border=ft.border.all(2, "#fbbf24" if is_active else ft.Colors.with_opacity(0.3, "#475569")),
+            border_radius=10,
+            padding=12,
             ink=True,
             on_click=on_theme_select(theme_key),
-            width=90,
-            shadow=ft.BoxShadow(
-                spread_radius=0,
-                blur_radius=8,
-                color=ft.Colors.with_opacity(0.15, "#fbbf24"),
-                offset=ft.Offset(0, 4)
-            ),
-            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            tooltip=theme_data["description"]
         )
-        theme_buttons.append(theme_btn)
-    
-    create_header = ft.Container(
+        
+        theme_buttons[theme_key] = button
+        return button
+
+    # Create theme buttons
+    theme_buttons_list = [create_theme_button(key, theme) for key, theme in ENHANCED_BACKGROUND_THEMES.items() if key != "random"]
+
+    theme_selection_container = ft.Container(
         content=ft.Column(
             [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.PALETTE_ROUNDED, size=16, color="#fbbf24"),
+                        ft.Text(
+                            "Choose Theme",
+                            size=14,
+                            color="#f8fafc",
+                            weight=ft.FontWeight.BOLD
+                        )
+                    ],
+                    spacing=8
+                ),
+                ft.Container(height=12),
+                ft.GridView(
+                    theme_buttons_list,
+                    runs_count=3,
+                    spacing=8,
+                    run_spacing=8,
+                    max_extent=80,
+                )
+            ],
+            spacing=0
+        ),
+        visible=True
+    )
+
+    # Preview section
+    preview_placeholder = ft.Container(
+        content=ft.Column(
+            [
+                ft.Icon(ft.Icons.IMAGE_ROUNDED, size=48, color=ft.Colors.with_opacity(0.3, "#64748b")),
+                ft.Container(height=12),
                 ft.Text(
-                    "Create Image",
-                    size=28,
-                    weight=ft.FontWeight.BOLD,
-                    color="#f8fafc",
+                    "Image Preview",
+                    size=14,
+                    color="#64748b",
+                    weight=ft.FontWeight.W_500,
                     text_align=ft.TextAlign.CENTER,
                 ),
+                ft.Container(height=6),
                 ft.Text(
-                    "Transform quotes into beautiful images",
+                    "Generate an image to see preview",
                     size=12,
                     color="#64748b",
                     text_align=ft.TextAlign.CENTER,
-                    weight=ft.FontWeight.W_500
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=4
+            alignment=ft.MainAxisAlignment.CENTER,
         ),
-        padding=ft.padding.only(top=20, bottom=15, left=30, right=30)
+        alignment=ft.alignment.center,
+        height=250,
+        bgcolor=ft.Colors.with_opacity(0.03, "#1e293b"),
+        border=ft.border.all(1, ft.Colors.with_opacity(0.2, "#475569")),
+        border_radius=12,
     )
-    
-    selected_theme_text = ft.Text(
-        ref=selected_theme,
-        value="Sunset",
-        size=15,
-        color="#fbbf24",
-        weight=ft.FontWeight.BOLD,
-        text_align=ft.TextAlign.CENTER,
+
+    preview_image_container = ft.Container(
+        content=ft.Stack(
+            [
+                preview_placeholder,
+                ft.Image(
+                    ref=preview_image,
+                    width=280,
+                    height=250,
+                    fit=ft.ImageFit.CONTAIN,
+                    border_radius=12,
+                    visible=False,
+                ),
+                create_loading,
+            ]
+        ),
+        alignment=ft.alignment.center,
+        height=250,
     )
-    
-    download_button = ft.Container(
-        ref=download_button_ref,
+
+    # Generate button - now dynamically enabled/disabled
+    generate_btn_container = ft.Container(
         content=ft.Row(
             [
-                ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, size=22, color="#0f172a"),
+                ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, color="#fbbf24", size=20),
                 ft.Text(
-                    "Download Image",
+                    "Generate Image",
                     size=14,
-                    color="#0f172a",
+                    color="#fbbf24",
                     weight=ft.FontWeight.BOLD
                 )
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8
         ),
-        bgcolor="#fbbf24",
-        border_radius=14,
+        bgcolor=ft.Colors.with_opacity(0.1, "#fbbf24"),
+        border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#fbbf24")),
+        border_radius=12,
+        padding=16,
+        ink=True,
+        on_click=on_generate_click,
+        disabled=True,  # Initially disabled until we have a quote
+    )
+
+    # Download button
+    download_button_ref = ft.Ref[ft.Container]()
+    download_button = ft.Container(
+        ref=download_button_ref,
+        content=ft.Row(
+            [
+                ft.Icon(ft.Icons.DOWNLOAD_ROUNDED, color="#10b981", size=20),
+                ft.Text(
+                    "Download Image",
+                    size=14,
+                    color="#10b981",
+                    weight=ft.FontWeight.BOLD
+                )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=8
+        ),
+        bgcolor=ft.Colors.with_opacity(0.1, "#10b981"),
+        border=ft.border.all(1.5, ft.Colors.with_opacity(0.6, "#10b981")),
+        border_radius=12,
         padding=16,
         ink=True,
         on_click=on_download_click,
-        shadow=ft.BoxShadow(
-            spread_radius=0,
-            blur_radius=15,
-            color=ft.Colors.with_opacity(0.4, "#fbbf24"),
-            offset=ft.Offset(0, 6)
-        ),
-        animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         visible=False,
     )
-    
+
+    # Improved create page content
     create_content = ft.Column(
         [
-            create_header,
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Container(
-                            content=ft.Row(
-                                [
-                                    ft.Icon(ft.Icons.PALETTE_ROUNDED, size=18, color="#fbbf24"),
-                                    ft.Text(
-                                        "Select Background Theme",
-                                        size=14,
-                                        color="#f8fafc",
-                                        weight=ft.FontWeight.BOLD,
-                                    ),
-                                ],
-                                spacing=8
-                            ),
-                            padding=ft.padding.only(bottom=12)
-                        ),
                         ft.Row(
-                            theme_buttons[:4],
+                            [
+                                ft.Icon(ft.Icons.IMAGE_ROUNDED, size=28, color="#fbbf24"),
+                                ft.Text(
+                                    "Create Quote Image",
+                                    size=24,
+                                    weight=ft.FontWeight.BOLD,
+                                    color="#f8fafc",
+                                ),
+                            ],
+                            spacing=12,
                             alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=10,
                         ),
-                        ft.Container(height=10),
+                        ft.Container(height=4),
+                        ft.Text(
+                            "Transform quotes into beautiful images",
+                            size=13,
+                            color="#64748b",
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=0
+                ),
+                padding=ft.padding.only(top=20, bottom=16, left=30, right=30)
+            ),
+            
+            # Current Quote Section
+            ft.Container(
+                content=current_quote_display,
+                padding=ft.padding.symmetric(horizontal=20)
+            ),
+            ft.Container(height=8),
+            
+            # Quote status indicator
+            ft.Container(
+                content=quote_status_text,
+                padding=ft.padding.symmetric(horizontal=20),
+                alignment=ft.alignment.center,
+            ),
+            ft.Container(height=16),
+            
+            # Background Type Selection
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Background Style",
+                            size=14,
+                            color="#f8fafc",
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.CENTER
+                        ),
+                        ft.Container(height=12),
                         ft.Row(
-                            theme_buttons[4:8],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=10,
-                        ),
-                        ft.Container(height=10),
-                        ft.Row(
-                            theme_buttons[8:],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=10,
-                        ),
-                        ft.Container(height=16),
-                        ft.Container(
-                            content=ft.Row(
-                                [
-                                    ft.Icon(ft.Icons.CHECK_CIRCLE_ROUNDED, size=18, color="#10b981"),
-                                    ft.Text("Selected: ", size=13, color="#94a3b8", weight=ft.FontWeight.W_500),
-                                    selected_theme_text,
-                                ],
-                                alignment=ft.MainAxisAlignment.CENTER,
-                                spacing=6
-                            ),
-                            bgcolor=ft.Colors.with_opacity(0.07, "#1e293b"),
-                            border=ft.border.all(1, ft.Colors.with_opacity(0.25, "#10b981")),
-                            border_radius=12,
-                            padding=12,
+                            [gradient_btn_container, photo_btn_container],
+                            spacing=12,
+                            alignment=ft.MainAxisAlignment.CENTER
                         ),
                     ],
                     spacing=0
                 ),
-                padding=ft.padding.symmetric(horizontal=30),
+                padding=ft.padding.symmetric(horizontal=20)
             ),
-            ft.Container(height=20),
+            ft.Container(height=16),
+            
+            # Theme Selection
             ft.Container(
-                content=ft.ElevatedButton(
-                    content=ft.Row(
-                        [
-                            ft.Icon(ft.Icons.AUTO_AWESOME_ROUNDED, size=20),
-                            ft.Text("Generate Image", size=15, weight=ft.FontWeight.BOLD),
-                        ],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        spacing=8
-                    ),
-                    on_click=on_generate_click,
-                    bgcolor="#fbbf24",
-                    width=300,
-                    color="#0f172a",
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=14),
-                        padding=ft.padding.symmetric(horizontal=36, vertical=18),
-                        elevation=8,
-                    ),
-                ),
-                alignment=ft.alignment.center,
+                content=theme_selection_container,
+                padding=ft.padding.symmetric(horizontal=20)
             ),
-            ft.Container(height=20),
-            ft.Container(
-                content=ft.Stack(
-                    [
-                        ft.Container(
-                            content=ft.Image(
-                                ref=preview_image,
-                                visible=False,
-                                width=320,
-                                height=320,
-                                fit=ft.ImageFit.CONTAIN,
-                                border_radius=16,
-                            ),
-                            alignment=ft.alignment.center,
-                        ),
-                        ft.Container(
-                            ref=create_loading,
-                            content=ft.Column(
-                                [
-                                    ft.ProgressRing(color="#fbbf24", width=50, height=50, stroke_width=4),
-                                    ft.Container(height=16),
-                                    ft.Text(
-                                        "Creating masterpiece...",
-                                        size=13,
-                                        color="#94a3b8",
-                                        weight=ft.FontWeight.W_600
-                                    )
-                                ],
-                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                spacing=0
-                            ),
-                            visible=False,
-                            alignment=ft.alignment.center,
-                        ),
-                    ],
-                ),
-                padding=ft.padding.symmetric(horizontal=30),
-                height=340,
-            ),
-            ft.Container(
-                content=download_button,
-                padding=ft.padding.symmetric(horizontal=30),
-                alignment=ft.alignment.center,
-            ),
-            ft.Container(height=10),
+            ft.Container(height=16),
+            
+            # Generate Button with status
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(ft.Icons.INFO_OUTLINE_ROUNDED, color="#fb923c", size=36),
-                        ft.Container(height=10),
+                        generate_btn_container,
+                        ft.Container(height=8),
+                        generating_text,
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=0
+                ),
+                padding=ft.padding.symmetric(horizontal=20)
+            ),
+            ft.Container(height=16),
+            
+            # Preview Area
+            ft.Container(
+                content=ft.Column(
+                    [
                         ft.Text(
-                            "Image creation requires Pillow",
+                            "Preview",
                             size=14,
                             color="#f8fafc",
                             weight=ft.FontWeight.BOLD,
-                            text_align=ft.TextAlign.CENTER,
+                            text_align=ft.TextAlign.CENTER
                         ),
-                        ft.Container(height=6),
-                        ft.Text(
-                            "Install: pip install Pillow==10.4.0",
-                            size=12,
-                            color="#94a3b8",
-                            text_align=ft.TextAlign.CENTER,
-                            weight=ft.FontWeight.W_500,
-                        ),
+                        ft.Container(height=12),
+                        preview_image_container,
+                        ft.Container(height=12),
+                        download_button,
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=0
                 ),
-                padding=18,
-                bgcolor=ft.Colors.with_opacity(0.1, "#fb923c"),
-                border=ft.border.all(1, ft.Colors.with_opacity(0.3, "#fb923c")),
-                border_radius=14,
-                margin=ft.margin.only(left=30, right=30, bottom=20),
-            ) if not PILLOW_AVAILABLE else ft.Container(),
+                padding=ft.padding.symmetric(horizontal=20)
+            ),
+            ft.Container(height=20),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         spacing=0,
         scroll=ft.ScrollMode.ADAPTIVE,
         expand=True,
     )
-    
+
     # About page content
     about_content = ft.Column(
         [
@@ -2083,7 +2316,7 @@ def main(page: ft.Page):
     # Page container
     page_container = ft.Container(
         ref=current_page_view,
-        content=home_content,
+        content=home_content,       
         expand=True,
         animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
     )
@@ -2104,6 +2337,7 @@ def main(page: ft.Page):
             elif page_name == "create":
                 page_container.content = create_content
                 update_nav_active("create")
+                update_current_quote_display()
             elif page_name == "about":
                 page_container.content = about_content
                 update_nav_active("about")
@@ -2111,6 +2345,16 @@ def main(page: ft.Page):
         except Exception as e:
             print(f"Critical error switching page: {e}")
             show_error(f"Navigation error: {str(e)[:50]}")
+    
+    # Enhanced update quote display to handle create page
+    original_update_quote_display = update_quote_display
+    
+    def enhanced_update_quote_display(quote_data):
+        """Enhanced update quote display that also updates create page"""
+        original_update_quote_display(quote_data)
+        update_current_quote_display()
+    
+    update_quote_display = enhanced_update_quote_display
     
     # Main layout
     try:
@@ -2153,6 +2397,9 @@ def main(page: ft.Page):
                 expand=True
             )
         )
+        
+        # Initialize the quote display
+        update_current_quote_display()
         
         # Load initial quote - prioritize daily quote on app start
         try_load_banner_ad()  # Try to load ad
@@ -2199,4 +2446,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main,assets_dir="asstes")
+    ft.app(target=main, assets_dir="assets")
